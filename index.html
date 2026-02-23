@@ -1,0 +1,206 @@
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retroalimentación competencias clave</title>
+    <script src="https://js.puter.com/v2/"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <header class="bg-light py-3 mb-4">
+        <div class="container">
+            <div class="d-flex justify-content-between ">
+                <img src="https://cuatrovientos.org/wp-content/uploads/2025/01/LOGO-CENTRO-INTEGRADO-CUATROVIENTOS-300x115-2.png"
+                    alt="Logo" style="height: 60px; margin-right: 20px;">
+            </div>
+        </div>
+    </header>
+    <main>
+        <div class="container">
+            <div class="row">
+                <div class="col-10 mx-auto">
+                    <h5 class="display-5">Generador de retroalimentación para competencias clave del alumnado. </h5>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-12 my-5">
+                    <form class="form">
+                        <textarea class="form-control" rows="10" cols="50"
+                            placeholder="Pegar resultados de las calificaciones obtenidas del excel de competencias clave (incluir cabecera!)"></textarea>
+                        <button class="my-5 btn btn-primary btn-lg btn-block " type="submit">Generar</button>
+                    </form>
+
+                    <div class="mx-auto">
+                        <ul id="results" class="list-group">
+
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script>
+        if (!navigator.onLine) {
+            alert("No hay conexión a internet");
+        }
+        const form = document.querySelector('form');
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            form.style.display = 'none';
+            const textarea = document.querySelector('textarea');
+            // button disabled to prevent multiple clicks
+            form.querySelector('button').disabled = true;
+            const input = textarea.value;
+            if (input.trim() === "") {
+                document.body.innerHTML +=
+                    `
+                            <div   class=" alert alert-danger d-flex align-items-center" role="alert">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-exclamation-triangle-fill flex-shrink-0 me-2" viewBox="0 0 16 16" role="img" aria-label="Warning:">
+                                    <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
+                                </svg>
+                                <div>
+                                    Por favor, introduce las calificaciones.
+                                </div>
+                            </div>
+                            `
+                msgBox.style.display = "block";
+                setTimeout(() => document.location.reload(), 2000);
+            }
+            fetch('https://raw.githubusercontent.com/anderfrago/prompt-cc-feedback/refs/heads/main/promt.toon').then(response => response.text()).then(prompt => {
+                //console.log('Prompt loaded:', JSON.stringify(prompt));
+                document.body.innerHTML += `<div class="alert alert-primary d-flex  justify-content-between" role="alert">
+                                                <div class="d-flex align-items-center">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
+                                                        class="bi bi-exclamation-triangle-fill flex-shrink-0 me-2" viewBox="0 0 16 16" role="img"
+                                                        aria-label="Warning:">
+                                                        <path
+                                                            d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
+                                                    </svg>
+                                                    <div>
+                                                        prompt cargado, generando respuesta...
+                                                    </div>
+                                                </div>
+                                                <div class="spinner-border" role="status">
+                                                    <span class="visually-hidden">Loading...</span>
+                                                </div>
+                                            </div>`;
+
+                (async () => {
+                    let answer = '';
+
+                    try {
+                        const resp = await puter.ai.chat(JSON.stringify(prompt) + ". The excel in text mode:" + input, {
+                            model: 'gemini-2.5-flash', stream: true, config: {
+                                responseMimeType: "application/json"
+                            }
+                        });
+
+                        for await (const part of resp) answer += part?.text.replaceAll('\n', '<br>');
+
+                    } catch (error) {
+
+                        document.body.innerHTML += `<div class="alert alert-danger d-flex align-items-center" role="alert">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-exclamation-triangle-fill flex-shrink-0 me-2" viewBox="0 0 16 16" role="img" aria-label="Warning:">
+                            <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
+                        </svg>
+                        <div>
+                            Error al generar la respuesta.
+                        </div>
+                    </div>`;
+                    }
+
+
+                    [].forEach.call(document.querySelectorAll('.spinner-border'), function (el) {
+                        el.style.visibility = 'hidden';
+                    });
+                    document.body.innerHTML += `
+                    <div class="alert alert-primary d-flex align-items-center" role="alert">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-exclamation-triangle-fill flex-shrink-0 me-2" viewBox="0 0 16 16" role="img" aria-label="Warning:">
+                            <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
+                        </svg>
+                        <div>
+                            procesando...
+                        </div>
+                    </div>`;
+
+
+                    try {
+                        // Format response
+                        answer = answer.replaceAll('<br>', '')
+                        answer = answer.replaceAll('`', '')
+                        answer = answer.replaceAll("'", "")
+                        answer = answer.replaceAll('json', '"json":')
+                        answer = JSON.stringify("{" + answer + "}")
+                        data = JSON.parse(answer)
+                        data = JSON.parse(data)
+                        // This line checks if 'data.json' exists. If not, it assumes 'data' is the array.
+                        const peopleList = data.json ? data.json : data;
+
+                        if (!Array.isArray(peopleList)) {
+                            console.error("Error: The data provided is not an array.");
+                        } else {
+                            // Iterating through the detected list
+                            peopleList.forEach(person => {
+                                let personString = `${person.intro}%0D%0A`;
+                                // Loop through the competencies array
+                                person.competencia_evaluada.forEach(comp => {
+                                    personString += `%0D%0A  ${comp.nombre_competencia.trim().toUpperCase()}.  Nota: ${comp.nota}  %0D%0A`
+                                    personString += `%09%09   Rúbrica:%0D%0A`;
+                                    personString += `%09%09     - ${comp.rubrica}%0D%0A`;
+
+                                    if (!Array.isArray(comp.recomendaciones)) {
+                                        console.error("Error: The comp.recomendaciones provided is not an array.");
+                                    } else {
+                                        personString += `%09%09   Recomendaciones:%0D%0A`;
+                                        // Loop through the recommendations array
+                                        comp.recomendaciones.forEach(rec => {
+                                            personString += `%09%09%09     - ${rec}%0D%0A`;
+                                        });
+
+                                    }
+                                });
+
+                                personString += `%0D%0A${person.conclusión}%0D%0A%0D%0A`;
+                                personString += `Atentamente el equipo docente.`;
+
+                                document.getElementById("results").innerHTML +=
+                                    `
+                            <li class="list-group-item">
+                                <input type="checkbox" /> 
+                                <a target="_blank" href="https://mail.google.com/mail/?view=cm&fs=1&tf=1&to=${person.email}&su=Retroalimentación competencias clave&body=${personString}">
+                                    ${person.nombre}
+                                </a>
+                                </br>
+                            </li>
+                            `
+
+                            });
+
+                        }
+                        [].forEach.call(document.querySelectorAll('.alert'), function (el) {
+                            el.style.visibility = 'hidden';
+                        });
+                    } catch (error) {
+                        console.error(error);
+                        document.body.innerHTML += `<div class="alert alert-danger d-flex align-items-center" role="alert">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-exclamation-triangle-fill flex-shrink-0 me-2" viewBox="0 0 16 16" role="img" aria-label="Warning:">
+                                    <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
+                                </svg>
+                                <div>
+                                    Error al generar la respuesta.
+                                </div>
+                            </div>`;
+
+                    }
+
+
+
+                })();
+            });
+        });
+    </script>
+</body>
+
+</html>
