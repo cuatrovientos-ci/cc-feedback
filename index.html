@@ -92,12 +92,12 @@
 
                     try {
                         const resp = await puter.ai.chat(JSON.stringify(prompt) + ". The excel in text mode:" + input, {
-                            model: 'gemini-2.5-flash', stream: true, config: {
+                            model: 'google/gemini-3.1-pro-preview', stream: true, config: {
                                 responseMimeType: "application/json"
                             }
                         });
 
-                        for await (const part of resp) answer += part?.text.replaceAll('\n', '<br>');
+                        for await (const part of resp) answer += part?.text // .replaceAll('\n', '<br>');
 
                     } catch (error) {
 
@@ -128,10 +128,11 @@
 
                     try {
                         // Format response
-                        answer = answer.replaceAll('<br>', '')
+                        answer = answer.replaceAll('undefined', '')
                         answer = answer.replaceAll('`', '')
                         answer = answer.replaceAll("'", "")
-                        answer = answer.replaceAll('json', '"json":')
+                        //answer = answer.replaceAll('json', '"json":')
+                        answer = '"json":' + answer
                         answer = JSON.stringify("{" + answer + "}")
                         data = JSON.parse(answer)
                         data = JSON.parse(data)
@@ -150,16 +151,18 @@
                                     personString += `%09%09   Rúbrica:%0D%0A`;
                                     personString += `%09%09     - ${comp.rubrica}%0D%0A`;
 
-                                    if (!Array.isArray(comp.recomendaciones)) {
-                                        console.error("Error: The comp.recomendaciones provided is not an array.");
-                                    } else {
-                                        personString += `%09%09   Recomendaciones:%0D%0A`;
-                                        // Loop through the recommendations array
-                                        comp.recomendaciones.forEach(rec => {
-                                            personString += `%09%09%09     - ${rec}%0D%0A`;
-                                        });
+                                    // if (!Array.isArray(comp.recomendaciones)) {
+                                    //     console.error("Error: The comp.recomendaciones provided is not an array.");
+                                    // } else {
+                                    //     personString += `%09%09   Recomendaciones:%0D%0A`;
+                                    //     // Loop through the recommendations array
+                                    //     comp.recomendaciones.forEach(rec => {
+                                    //         personString += `%09%09%09     - ${rec}%0D%0A`;
+                                    //     });
 
-                                    }
+                                    // }
+                                    personString += `%09%09   Recomendaciones:%0D%0A`;
+                                    personString += `%09%09%09     - ${comp.recomendaciones}%0D%0A`;
                                 });
 
                                 personString += `%0D%0A${person.conclusión}%0D%0A%0D%0A`;
