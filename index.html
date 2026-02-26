@@ -68,7 +68,7 @@
                 msgBox.style.display = "block";
                 setTimeout(() => document.location.reload(), 2000);
             }
-            fetch('https://raw.githubusercontent.com/anderfrago/prompt-cc-feedback/refs/heads/main/promt.toon').then(response => response.text()).then(prompt => {
+            fetch('https://raw.githubusercontent.com/cuatrovientos-ci/cc-feedback/refs/heads/main/promt.toon').then(response => response.text()).then(prompt => {
                 //console.log('Prompt loaded:', JSON.stringify(prompt));
                 document.body.innerHTML += `<div class="alert alert-primary d-flex  justify-content-between" role="alert">
                                                 <div class="d-flex align-items-center">
@@ -92,7 +92,7 @@
 
                     try {
                         const resp = await puter.ai.chat(JSON.stringify(prompt) + ". The excel in text mode:" + input, {
-                            model: 'google/gemini-3.1-pro-preview', stream: true, config: {
+                            model: 'google/gemini-3-flash-preview', stream: true, config: {
                                 responseMimeType: "application/json"
                             }
                         });
@@ -131,8 +131,8 @@
                         answer = answer.replaceAll('undefined', '')
                         answer = answer.replaceAll('`', '')
                         answer = answer.replaceAll("'", "")
-                        //answer = answer.replaceAll('json', '"json":')
-                        answer = '"json":' + answer
+                        answer = answer.replaceAll('json', '"json":')
+                        //answer = '"json":' + answer
                         answer = JSON.stringify("{" + answer + "}")
                         data = JSON.parse(answer)
                         data = JSON.parse(data)
@@ -146,7 +146,7 @@
                             peopleList.forEach(person => {
                                 let personString = `${person.intro}%0D%0A`;
                                 // Loop through the competencies array
-                                person.competencia_evaluada.forEach(comp => {
+                                person.competencias_evaluadas.forEach(comp => {
                                     personString += `%0D%0A  ${comp.nombre_competencia.trim().toUpperCase()}.  Nota: ${comp.nota}  %0D%0A`
                                     personString += `%09%09   Rúbrica:%0D%0A`;
                                     personString += `%09%09     - ${comp.rubrica}%0D%0A`;
