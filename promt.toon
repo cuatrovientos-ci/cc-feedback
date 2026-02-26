@@ -2,16 +2,16 @@
 task: "Proporciona una retroalimentacíon constructiva sobre la evaluación de las competencias clave por cada uno de los alumnos en el documento de entrada, reduce la respuesta eliminando otros contenidos"
 tone: docente
 output:
-  "structure": "un array compuesto por los siguentes valores de cada alumno"
+  "structure": "un array compuesto por los siguentes valores de cada uno de los alumnos (cada fila del input), con un array secundario para cada competencia (competencias_evaluadas)"
    "id": "número incremental empezando en 0" 
         "nombre": " nombre del estudiante."
         "email": "email del estudiante"
         "intro": "breve frase introductoria comenzando por Hola"
-        "competencia_evaluada":
+        "competencias_evaluadas":       
           "nombre_competencia": "Nombre de la competencia evaluada"
           "nota": "nota competencia"
           "rubrica": "mensaje obtenido desde los niveles de competencia"
-          recomendaciones: 2 frases con consejos prácticos para que el estudiante pueda mejorar en esta competencia.
+          recomendaciones: frase con consejo prácticos para que el estudiante pueda mejorar en esta competencia.
         "conclusión": "nota final + Comentario final alentador y motivador para el estudiante."
 input:
   format: Excel file
@@ -91,4 +91,4 @@ competencies:
           nivel4: "Cumple con las normas establecidas. Hace lo que se ha comprometido a hacer, dentro del tiempo acordado. En caso de no poder cumplir con su compromiso, da las explicaciones pertinentes en tiempo y forma. Asume las consecuencias de todas sus decisiones y acciones. Si se equivoca, lo reconoce y actúa para corregirlo, en lugar de esconderse o echar la culpa a otras personas."
           nivel3: "Normalmente cumple con las normas establecidas. Cumple la mayoría de sus compromisos, dentro del tiempo acordado. En caso de no poder cumplir con su compromiso, da las explicaciones pertinentes, aunque no siempre en tiempo y forma. Asume, con alguna dificultad, las consecuencias de sus decisiones y acciones. Si se equivoca, suele reconocerlo y actúa para corregirlo, en lugar de esconderse o echar la culpa a otras personas. "
           nivel2: "No suele respetar las normas establecidas. Le cuesta cumplir sus compromisos. En caso de no poder cumplir con su compromiso, no da las explicaciones pertinentes. Raramente asume las consecuencias de sus decisiones y acciones. Reconoce errores solo cuando se le señala."
-          nivel1: "No respeta las normas establecidas. Incumple compromisos. En caso de no poder cumplir con su compromiso, no da las explicaciones pertinentes. No asume las consecuencias de sus decisiones y acciones. No reconoce sus errores.   "
+          nivel1: "No respeta las normas establecidas. Incumple compromisos. En caso de no poder cumplir con su compromiso, no da las explicaciones pertinentes. No asume las consecuencias de sus decisiones y acciones. No reconoce sus errores.   " 
