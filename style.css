@@ -1,0 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
+:root {
+    --bs-primary: #0f4184;
+    --bs-font-sans-serif: 'Roboto', sans-serif;
+}
+
+body {
+    font-family: var(--bs-font-sans-serif);
+}
+
+.btn-primary {
+    background-color: var(--bs-primary);
+    border-color: var(--bs-primary);
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active {
+    background-color: #0d3a75;
+    /* Slightly darker shade for hover */
+    border-color: #0c346a;
+}
+
+.alert-primary {
+    background-color: #e7ecf3;
+    /* Light tint for alert background */
+    border-color: #ccd9e6;
+    color: var(--bs-primary);
+}
+
+.bg-primary {
+    background-color: var(--bs-primary) !important;
+
+}
+
+.text-primary {
+    color: var(--bs-primary) !important;
+}
