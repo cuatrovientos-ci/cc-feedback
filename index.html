@@ -37,6 +37,15 @@
                             <div id="form-container" class="col-12 my-5">
 
                                 <form class="form">
+                                    <div class="row">
+                                        <div class="col-3 my-2">
+                                            <select id="form-select" class="form-select">
+                                                <option value="google/gemini-2.5-flash">Rápido</option>
+                                                <option value="google/gemini-3-flash-preview" selected>Listo</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
                                     <textarea class="form-control" rows="10" cols="50"
                                         placeholder="Pegar resultados de las calificaciones obtenidas del excel de competencias clave (incluir cabecera!)"></textarea>
                                     <button class="my-5 btn btn-primary btn-lg btn-block "
@@ -84,7 +93,6 @@
                             </div>
                             `
                 msgBox.style.display = "block";
-                setTimeout(() => document.location.reload(), 2000);
             }
             fetch('https://raw.githubusercontent.com/cuatrovientos-ci/cc-feedback/refs/heads/main/promt.toon').then(response => response.text()).then(prompt => {
                 //console.log('Prompt loaded:', JSON.stringify(prompt));
@@ -105,12 +113,26 @@
                                                 </div>
                                             </div>`;
 
+                setTimeout(() => {
+                    document.querySelector('.spinner-border').style.display = 'none';
+                }, 2000);
+
+
+
                 (async () => {
+                    await puter.auth.signIn().then((res) => {
+                        // puter.print('Signed in<br>' + JSON.stringify(res));
+                        puter.auth.getMonthlyUsage().then(function (usage) {
+                            console.log(`Monthly usage: ${JSON.stringify(usage, null, 2)}`);
+                        });
+                    });
+
                     let answer = '';
 
                     try {
+                        let modelDefinition = document.getElementById("form-select").value;
                         const resp = await puter.ai.chat(JSON.stringify(prompt) + ". The excel in text mode:" + input, {
-                            model: 'google/gemini-3-flash-preview', stream: true, config: {
+                            model: modelDefinition, stream: true, testMode: true, config: {
                                 responseMimeType: "application/json"
                             }
                         });
@@ -125,12 +147,11 @@
                         </svg>
                         <div>
                             Error al generar la respuesta. 
-                            <p>(error: ${error.error.message})</p>
+                            <p>(error: ${error?.error?.message})</p>
                         </div>
                     </div>`;
                         return;
                     }
-
 
                     [].forEach.call(document.querySelectorAll('.spinner-border'), function (el) {
                         el.style.visibility = 'hidden';
@@ -144,7 +165,6 @@
                             procesando...
                         </div>
                     </div>`;
-
 
                     try {
                         // Format response
@@ -217,8 +237,6 @@
                             </div>`;
 
                     }
-
-
 
                 })();
             });
