@@ -94,7 +94,7 @@
 
         try {
             // 1. Obtener el Prompt desde GitHub
-            const promptUrl = 'https://raw.githubusercontent.com/cuatrovientos-ci/cc-feedback/refs/heads/main/promt.toon';
+            const promptUrl = 'https://raw.githubusercontent.com/cuatrovientos-ci/cc-feedback/refs/heads/main/prompt.toon';
             const promptResponse = await fetch(promptUrl);
             if (!promptResponse.ok) throw new Error("No se pudo cargar la configuración del prompt desde GitHub.");
             const promptText = await promptResponse.text();
