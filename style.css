@@ -5,6 +5,37 @@
     --bs-font-sans-serif: 'Roboto', sans-serif;
 }
 
+
+body,
+html {
+    height: 100%;
+    margin: 0;
+    background-color: white;
+}
+
+.sidebar-accent {
+    width: 1.5rem;
+    background-color: var(--bs-primary);
+    height: 100vh;
+    position: fixed;
+    left: 0;
+    top: 0;
+}
+
+.main-content {
+    margin-left: 2rem;
+    padding: 2rem;
+}
+
+#loading-overlay {
+    display: none;
+}
+
+.list-group-item:hover {
+    background-color: #f1f4f9;
+    transition: 0.3s;
+}
+
 body {
     font-family: var(--bs-font-sans-serif);
 }
