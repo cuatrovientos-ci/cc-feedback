@@ -69,174 +69,84 @@
 
 
     <script>
-        if (!navigator.onLine) {
-            alert("No hay conexión a internet");
-        }
-        const form = document.querySelector('form');
-        form.addEventListener('submit', (event) => {
-            event.preventDefault();
-            form.style.display = 'none';
-            const textarea = document.querySelector('textarea');
-            // button disabled to prevent multiple clicks
-            form.querySelector('button').disabled = true;
-            const input = textarea.value;
-            if (input.trim() === "") {
-                document.querySelector('#form-container').innerHTML +=
-                    `
-                            <div   class=" alert alert-danger d-flex align-items-center" role="alert">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-exclamation-triangle-fill flex-shrink-0 me-2" viewBox="0 0 16 16" role="img" aria-label="Warning:">
-                                    <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
-                                </svg>
-                                <div>
-                                    Por favor, introduce las calificaciones.
-                                </div>
-                            </div>
-                            `
-                msgBox.style.display = "block";
+const form = document.querySelector('form');
+const resultsList = document.getElementById('results');
+
+form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const textarea = document.querySelector('textarea');
+    const inputData = textarea.value.trim();
+
+    if (!inputData) {
+        alert("Por favor, pega los datos del Excel.");
+        return;
+    }
+
+    // Estado de carga
+    form.querySelector('button').disabled = true;
+    const loadingMsg = document.createElement('div');
+    loadingMsg.className = "alert alert-info";
+    loadingMsg.innerHTML = "⏳ Generando feedback personalizado... por favor espera.";
+    form.parentNode.insertBefore(loadingMsg, form.nextSibling);
+
+    try {
+        // Cargar el prompt
+        const promptRes = await fetch('https://raw.githubusercontent.com/anderfrago/prompt-cc-feedback/refs/heads/deepseek/promt.toon');
+        const promptText = await promptRes.text();
+
+        // Llamada a Puter AI
+        const resp = await puter.ai.chat(
+            `${promptText}\n\nDatos de entrada (Excel):\n${inputData}`, 
+            { 
+                model: 'google/gemini-3-flash-preview', // Cambiado a Gemini 3 según disponibilidad
+                responseMimeType: "application/json" 
             }
-            fetch('https://raw.githubusercontent.com/cuatrovientos-ci/cc-feedback/refs/heads/main/promt.toon').then(response => response.text()).then(prompt => {
-                //console.log('Prompt loaded:', JSON.stringify(prompt));
-                document.querySelector('#form-container').innerHTML += `<div class="alert alert-primary d-flex  justify-content-between" role="alert">
-                                                <div class="d-flex align-items-center">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
-                                                        class="bi bi-exclamation-triangle-fill flex-shrink-0 me-2" viewBox="0 0 16 16" role="img"
-                                                        aria-label="Warning:">
-                                                        <path
-                                                            d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
-                                                    </svg>
-                                                    <div>
-                                                        prompt cargado, generando respuesta...
-                                                    </div>
-                                                </div>
-                                                <div class="spinner-border" role="status">
-                                                    <span class="visually-hidden">Loading...</span>
-                                                </div>
-                                            </div>`;
+        );
 
+        let rawAnswer = resp.text();
+        
+        // Limpieza robusta de JSON
+        const jsonMatch = rawAnswer.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error("No se pudo encontrar un formato JSON válido en la respuesta.");
+        
+        const data = JSON.parse(jsonMatch[0]);
+        const peopleList = Array.isArray(data) ? data : (data.json || data.alumnos);
 
+        // Renderizar resultados
+        loadingMsg.remove();
+        form.style.display = 'none';
 
-                (async () => {
-                    await puter.auth.signIn().then((res) => {
-                        // puter.print('Signed in<br>' + JSON.stringify(res));
-                        puter.auth.getMonthlyUsage().then(function (usage) {
-                            console.log(`Monthly usage: ${JSON.stringify(usage, null, 2)}`);
-                        });
-                    });
-
-                    let answer = '';
-
-                    try {
-                        let modelDefinition = document.getElementById("form-select").value;
-                        const resp = await puter.ai.chat(JSON.stringify(prompt) + ". The excel in text mode:" + input, {
-                            model: modelDefinition, stream: true, testMode: true, config: {
-                                responseMimeType: "application/json"
-                            }
-                        });
-
-                        for await (const part of resp) answer += part?.text // .replaceAll('\n', '<br>');
-
-                    } catch (error) {
-
-                        document.querySelector('#form-container').innerHTML += `<div class="alert alert-danger d-flex align-items-center" role="alert">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-exclamation-triangle-fill flex-shrink-0 me-2" viewBox="0 0 16 16" role="img" aria-label="Warning:">
-                            <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
-                        </svg>
-                        <div>
-                            Error al generar la respuesta. 
-                            <p>(error: ${error?.error?.message})</p>
-                        </div>
-                    </div>`;
-                        return;
-                    }
-
-                    [].forEach.call(document.querySelectorAll('.spinner-border'), function (el) {
-                        el.style.visibility = 'hidden';
-                    });
-                    document.body.innerHTML += `
-                    <div class="alert alert-primary d-flex align-items-center" role="alert">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-exclamation-triangle-fill flex-shrink-0 me-2" viewBox="0 0 16 16" role="img" aria-label="Warning:">
-                            <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
-                        </svg>
-                        <div>
-                            procesando...
-                        </div>
-                    </div>`;
-
-                    try {
-                        // Format response
-                        answer = answer.replaceAll('undefined', '')
-                        answer = answer.replaceAll('`', '')
-                        answer = answer.replaceAll("'", "")
-                        answer = answer.replaceAll('json', '"json":')
-                        //answer = '"json":' + answer
-                        answer = JSON.stringify("{" + answer + "}")
-                        data = JSON.parse(answer)
-                        data = JSON.parse(data)
-                        // This line checks if 'data.json' exists. If not, it assumes 'data' is the array.
-                        const peopleList = data.json ? data.json : data;
-
-                        if (!Array.isArray(peopleList)) {
-                            console.error("Error: The data provided is not an array.");
-                        } else {
-                            // Iterating through the detected list
-                            peopleList.forEach(person => {
-                                let personString = `${person.intro}%0D%0A`;
-                                // Loop through the competencies array
-                                person.competencias_evaluadas.forEach(comp => {
-                                    personString += `%0D%0A  ${comp.nombre_competencia.trim().toUpperCase()}.  Nota: ${comp.nota}  %0D%0A`
-                                    personString += `%09%09   Rúbrica:%0D%0A`;
-                                    personString += `%09%09     - ${comp.rubrica}%0D%0A`;
-
-                                    // if (!Array.isArray(comp.recomendaciones)) {
-                                    //     console.error("Error: The comp.recomendaciones provided is not an array.");
-                                    // } else {
-                                    //     personString += `%09%09   Recomendaciones:%0D%0A`;
-                                    //     // Loop through the recommendations array
-                                    //     comp.recomendaciones.forEach(rec => {
-                                    //         personString += `%09%09%09     - ${rec}%0D%0A`;
-                                    //     });
-
-                                    // }
-                                    personString += `%09%09   Recomendaciones:%0D%0A`;
-                                    personString += `%09%09%09     - ${comp.recomendaciones}%0D%0A`;
-                                });
-
-                                personString += `%0D%0A${person.conclusión}%0D%0A%0D%0A`;
-                                personString += `Atentamente el equipo docente.`;
-
-                                document.getElementById("results").innerHTML +=
-                                    `
-                            <li class="list-group-item">
-                                <input type="checkbox" /> 
-                                <a target="_blank" href="https://mail.google.com/mail/?view=cm&fs=1&tf=1&to=${person.email}&su=Retroalimentación competencias clave&body=${personString}">
-                                    ${person.nombre}
-                                </a>
-                                </br>
-                            </li>
-                            `
-
-                            });
-
-                        }
-                        [].forEach.call(document.querySelectorAll('.alert'), function (el) {
-                            el.style.visibility = 'hidden';
-                        });
-                    } catch (error) {
-                        console.error(error);
-                        document.querySelector('#form-container').innerHTML += `<div class="alert alert-danger d-flex align-items-center" role="alert">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-exclamation-triangle-fill flex-shrink-0 me-2" viewBox="0 0 16 16" role="img" aria-label="Warning:">
-                                    <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
-                                </svg>
-                                <div>
-                                    Error al generar la respuesta.
-                                </div>
-                            </div>`;
-
-                    }
-
-                })();
+        peopleList.forEach(person => {
+            // Construcción del cuerpo del mensaje profesional
+            let emailBody = `${person.intro}\n\n`;
+            
+            person.competencias_evaluadas.forEach(comp => {
+                emailBody += `📌 ${comp.nombre_competencia.toUpperCase()}\n`;
+                emailBody += `Nota: ${comp.nota}\n`;
+                emailBody += `Feedback: ${comp.rubrica}\n`;
+                emailBody += `Sugerencia: ${comp.recomendaciones}\n\n`;
             });
+
+            emailBody += `${person.conclusión}\n\nAtentamente,\nEl Equipo Docente.`;
+
+            // Crear el enlace de Gmail
+            const mailtoUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${person.email}&su=${encodeURIComponent("Feedback Competencias Clave")}&body=${encodeURIComponent(emailBody)}`;
+
+            resultsList.innerHTML += `
+                <li class="list-group-item d-flex align-items-center">
+                    <input type="checkbox" class="me-3" style="width:20px; height:20px;">
+                    <a href="${mailtoUrl}" target="_blank" class="btn btn-outline-primary btn-sm me-3">Enviar Mail</a>
+                    <strong>${person.nombre}</strong> <span class="text-muted ms-2">(${person.email})</span>
+                </li>`;
         });
+
+    } catch (error) {
+        console.error("Error detallado:", error);
+        loadingMsg.className = "alert alert-danger";
+        loadingMsg.innerText = "❌ Error: " + error.message;
+        form.querySelector('button').disabled = false;
+    }
+});
     </script>
 </body>
 
