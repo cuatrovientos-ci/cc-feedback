@@ -1,29 +1,18 @@
  
-task: |
-  Genera un objeto JSON que contenga la retroalimentación constructiva para cada alumno. 
-  Para cada competencia (1 a 6), identifica el nivel (nivel1 a nivel4) según la nota numérica y los rangos definidos en 'levels'.
-  Usa los textos de 'niveles' correspondientes a cada competencia para construir el mensaje.
-  No incluyas explicaciones fuera del JSON. Responde ÚNICAMENTE con el objeto JSON. No añadas introducciones, explicaciones ni bloques de código Markdown.
+task: "Proporciona una retroalimentacíon constructiva sobre la evaluación de las competencias clave por cada uno de los alumnos en el documento de entrada, reduce la respuesta eliminando otros contenidos. Responde ÚNICAMENTE con el objeto JSON. No añadas introducciones, explicaciones ni bloques de código Markdown."
 tone: docente, empático y profesional.
 output:
-  structure: |
-    [
-      {
-        "id": "número incremental",
-        "nombre": "nombre del estudiante",
-        "email": "email del estudiante",
-        "intro": "Hola [nombre], tras evaluar tus competencias en este periodo...",
-        "evaluacion": [
-          {
-            "competencia": "Nombre de la competencia",
-            "nota": "valor numérico",
-            "feedback": "Texto del nivel correspondiente",
-            "recomendaciones": "2 frases breves con consejos prácticos"
-          }
-        ],
-        "conclusion": "Nota final + Comentario motivador."
-      }
-    ]
+  "structure": "un array compuesto por los siguentes valores de cada uno de los alumnos (cada fila del input), con un array secundario para cada competencia (competencias_evaluadas)"
+   "id": "número incremental empezando en 0" 
+        "nombre": " nombre del estudiante."
+        "email": "email del estudiante"
+        "intro": "breve frase introductoria comenzando por Hola"
+        "competencias_evaluadas":       
+          "nombre_competencia": "Nombre de la competencia evaluada"
+          "nota": "nota competencia"
+          "rubrica": "mensaje obtenido desde los niveles de competencia"
+          recomendaciones: frase con consejo prácticos para que el estudiante pueda mejorar en esta competencia.
+        "conclusión": "nota final + Comentario final alentador y motivador para el estudiante."
 input:
   format: Excel file
   sheet_name: NOTAS_CC
