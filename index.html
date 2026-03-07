@@ -157,8 +157,9 @@
                     });
                 }
 
-                emailBody += `${person.conclusión}\n\nAtentamente,\nEl Equipo Docente de Cuatrovientos.`;
-
+                emailBody += `${person.conclusión}\n\nAtentamente,\nEl Equipo Docente de Cuatrovientos.\n\n`;
+                emailBody += `Este feedback ha sido redactado con el apoyo de Inteligencia Artificial bajo la supervisión directa de tu profesor, garantizando una orientación personalizada basada en tus resultados reales.`;
+                
                 // Codificación segura para URL
                 const subject = encodeURIComponent("Retroalimentación: Competencias Clave");
                 const body = encodeURIComponent(emailBody);
