@@ -1,8 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-
 :root {
     --bs-primary: #0f4184;
-    --bs-font-sans-serif: 'Roboto', sans-serif;
+    --bs-font-sans-serif: Arial, sans-serif;
 }
 
 
@@ -68,3 +66,5 @@ body {
 .text-primary {
     color: var(--bs-primary) !important;
 }
+
+textarea.result-text {width:100%;min-height:300px;} .list-group-item{overflow-wrap:anywhere} #status{white-space:pre-wrap} @media(max-width:600px){.main-content{margin-left:1rem;padding:1rem}}
