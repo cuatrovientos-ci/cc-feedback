@@ -29,7 +29,7 @@
   const groups = ['Innovación y emprendimiento', 'Trabajo en equipo', 'Capacidad comunicativa', 'Competencia digital', 'Adaptación al entorno', 'Autonomía y responsabilidad'];
   const allNames = [...new Set([...competencies,...groups])];
   function header(value) {
-    const n=normalize(value);
+    const n=normalize(value).replace(/^[1-6]\.\s*/, '');
     if (['nombre','nombre del estudiante','student name','alumno','alumna'].includes(n)) return 'name';
     if (['email','correo','correo electronico','e-mail'].includes(n)) return 'email';
     if (['total','nota final'].includes(n)) return 'total';
@@ -38,28 +38,53 @@
     return allNames.find(name=>normalize(name)===n) || null;
   }
   function grade(value) {
-    if (/^nivel [1-4]$/i.test(value)) return 'Nivel '+value.slice(-1);
-    if (!/^(?:[0-9](?:[.,][0-9]{1,2})?|10(?:[.,]0{1,2})?)$/.test(value)) throw new Error('Usa notas entre 0 y 10 (hasta dos decimales), o Nivel 1 a Nivel 4. No se admite texto libre.');
+    if (!/^(?:[0-9](?:[.,][0-9]{1,2})?|10(?:[.,]0{1,2})?)$/.test(value)) throw new Error('Usa notas numéricas entre 0 y 10 (hasta dos decimales). No se admite texto libre.');
     return Number(value.replace(',','.'));
   }
   function parseStudents(input) {
-    const rows=parseTSV(input);
-    if(rows.length<2 || rows.length>101) throw new Error('Incluye cabecera y entre 1 y 100 personas.');
-    const headers=rows.shift().map(header);
-    if(headers.includes(null)||new Set(headers).size!==headers.length||!headers.includes('name')) throw new Error('Cabeceras desconocidas, duplicadas o falta Nombre. No se envía ninguna fila.');
+    if(input.length>100000) throw new Error('La entrada supera el límite de 100.000 caracteres.');
+    let rows;
+    if(input.includes('\t')) rows=parseTSV(input);
+    else rows=input.replace(/^\uFEFF/,'').split(/\r?\n/).filter(line=>line.trim()).map(line=>{
+      const tokens=line.trim().split(/\s+/); const numbers=[];
+      while(tokens.length && /^[0-9]+(?:[.,][0-9]+)?$/.test(tokens[tokens.length-1])) numbers.unshift(tokens.pop());
+      if(numbers.length<6||numbers.length>7) throw new Error('Sin cabecera, introduce nombre y seis notas, con total opcional. Usa tabulaciones para separar columnas con cabecera.');
+      const email=tokens[tokens.length-1]?.includes('@')?tokens.pop():null;
+      return [tokens.join(' '),...(email?[email]:[]),...numbers];
+    });
+    if(!rows.length) throw new Error('Introduce al menos una persona.');
+    const firstHeaders=rows[0].map(header);
+    const hasHeader=firstHeaders.some(h=>allNames.includes(h));
+    let headers;
+    if(hasHeader){
+      headers=firstHeaders;rows.shift();
+      if(headers.includes(null)||new Set(headers).size!==headers.length) throw new Error('Cabeceras desconocidas o duplicadas. No se envía ninguna fila.');
+    }else{
+      // Canonical positional schema, reconstructed for every row; no raw text reaches AI.
+      headers=['name','email',...groups,'total'];
+      rows=rows.map(row=>{
+        const cells=[...row];
+        const numericOnly=cells.every(c=>/^[0-9]+(?:[.,][0-9]+)?$/.test(c));
+        const name=numericOnly?'':cells.shift();
+        const email=cells[0]?.includes('@')?cells.shift():'';
+        if(cells.length!==6&&cells.length!==7)throw new Error('Sin cabecera se requieren seis competencias y, opcionalmente, Total.');
+        return [name,email,...cells.slice(0,6),cells.length===7?cells[6]:''];
+      });
+    }
+    if(rows.length<1 || rows.length>100) throw new Error('Incluye entre 1 y 100 personas.');
     const ni=headers.indexOf('name'),ei=headers.indexOf('email'),ti=headers.indexOf('total');
     const fields=headers.map((name,index)=>({name,index})).filter(f=>allNames.includes(f.name));
     if(!fields.length) throw new Error('Incluye al menos una competencia reconocida.');
     const seen=new Set();
     return rows.map((row,i)=>{
       if(row.length!==headers.length) throw new Error(`Fila ${i+2}: número de columnas incorrecto.`);
-      const name=row[ni],email=ei<0?'':row[ei];
+      const name=(ni<0?'':row[ni])||`Alumno${i+1}`,email=ei<0?'':row[ei];
       if(!name||name.length>120||/[\x00-\x1f\x7f]/.test(name)) throw new Error(`Fila ${i+2}: nombre inválido.`);
       if(email && (email.length>254||!/^[^\s@<>,;"?&=]+@[^\s@<>,;"?&=]+\.[^\s@<>,;"?&=]+$/.test(email)||seen.has(email.toLowerCase()))) throw new Error(`Fila ${i+2}: correo inválido o repetido.`);
       if(email) seen.add(email.toLowerCase());
       const values=fields.filter(f=>row[f.index]!=='').map(f=>({competencia:f.name,valor:grade(row[f.index])}));
       if(!values.length) throw new Error(`Fila ${i+2}: no hay competencias evaluadas.`);
-      return {name,email,total:ti>=0&&row[ti]!==''?grade(row[ti]):null,values};
+      return {name,email:email||`alumno${i+1}@example.invalid`,emailExample:!email,total:ti>=0&&row[ti]!==''?grade(row[ti]):null,values};
     });
   }
   function prepare(students) {

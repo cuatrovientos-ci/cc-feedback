@@ -10,7 +10,7 @@ function expire(){if(Date.now()-last>=900000)reset('Datos retirados por inactivi
 ['pointerdown','keydown','input'].forEach(type=>document.addEventListener(type,()=>{expire();last=Date.now();},true));
 setInterval(expire,15000);document.addEventListener('visibilitychange',expire);window.addEventListener('pagehide',()=>reset());window.addEventListener('pageshow',e=>{if(e.persisted)reset();});
 ['clear','erase'].forEach(id=>document.getElementById(id).addEventListener('click',()=>reset('Datos retirados. Las peticiones ya enviadas no se pueden retirar del proveedor.')));
-document.getElementById('example').addEventListener('click',()=>{reset();input.value='Nombre\tEmail\tCompetency 1 Level\tCompetency 2 Level\tTotal\nPersona ficticia\tpersona@example.invalid\t7,5\tNivel 3\t8';});
+document.getElementById('example').addEventListener('click',()=>{reset();input.value='Alumno1 5 5 6 4 6 7\nAlumno2 6 5 4 3 4 5';});
 function node(tag,text,cls){const n=document.createElement(tag);if(text)n.textContent=text;if(cls)n.className=cls;return n;}
 form.addEventListener('submit',event=>{
   event.preventDefault();
@@ -21,7 +21,7 @@ form.addEventListener('submit',event=>{
     send({type:'generate',request,records,model:document.getElementById('form-select').value});
     input.value='';form.style.display='none';loading.style.display='block';status.textContent='';
     timeout=setTimeout(()=>reset('Tiempo de espera agotado. Si vuelves a generar, se hará una nueva petición.'),180000);
-  }catch{status.textContent='Revisa cabeceras, columnas, correos y valores. Solo se admiten competencias reconocidas, notas 0–10 o Nivel 1–4; no se ha enviado esta tabla.';}
+  }catch{status.textContent='Revisa cabeceras, columnas, correos y valores. Sin cabecera, escribe seis notas, con nombre opcional numéricas 0–10, con total opcional; no se ha enviado esta tabla.';}
 });
 window.addEventListener('message',event=>{
   if(event.source!==parent||event.origin!==parentOrigin||!request||event.data?.request!==request)return;
@@ -38,7 +38,7 @@ window.addEventListener('message',event=>{
       for(const c of response.competencias_evaluadas){const value=person.values.find(v=>v.competencia===c.nombre_competencia).valor;body+=`${c.nombre_competencia}\nCalificación: ${value}\nValoración: ${c.rubrica}\nSugerencia: ${c.recomendaciones}\n\n`;}
       if(person.total!==null)body+=`Nota final introducida por el docente: ${person.total}\n\n`;
       body+=`${response.conclusion}\n\nAtentamente,\nEl Equipo Docente de Cuatrovientos.\n\nTexto elaborado con apoyo de inteligencia artificial y revisado por tu docente.`;
-      const card=node('article','','list-group-item p-3 mb-3'),heading=node('h3',person.name,'h5'),email=node('p',person.email||'Sin correo: copia el texto al canal institucional.');
+      const card=node('article','','list-group-item p-3 mb-3'),heading=node('h3',person.name,'h5'),email=node('p',person.email+(person.emailExample?' (correo de ejemplo: sustituir en Gmail antes de enviar)':''));
       const label=node('label','Revisa y adapta el borrador:');const area=node('textarea','','result-text form-control');area.value=body;area.spellcheck=false;area.autocomplete='off';area.id='draft-'+list.childElementCount;label.htmlFor=area.id;
       const review=node('label','','d-block my-3'),check=node('input');check.type='checkbox';review.append(check,document.createTextNode(' He revisado el contenido, las notas y el destinatario.'));
       const gmail=node('button','Generar Gmail','btn btn-outline-danger');gmail.type='button';gmail.disabled=true;
