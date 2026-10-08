@@ -68,3 +68,7 @@ body {
 }
 
 textarea.result-text {width:100%;min-height:300px;} .list-group-item{overflow-wrap:anywhere} #status{white-space:pre-wrap} @media(max-width:600px){.main-content{margin-left:1rem;padding:1rem}}
+
+#loading-overlay{position:fixed;inset:0;background:rgba(238,243,250,.97);z-index:1000;align-items:center;justify-content:center;padding:20px}.loading-card{background:white;border:1px solid #ccd9e6;border-radius:12px;padding:32px;max-width:520px;text-align:center;box-shadow:0 8px 30px #1232}.loading-card h4{margin-top:20px}.loading-card .spinner-border{width:3rem;height:3rem}
+
+.draft-details>summary{display:flex;align-items:center;gap:16px;cursor:pointer;padding:4px 0}.draft-details>summary::before{content:'▸';color:#0f4184;font-size:1.2rem}.draft-details[open]>summary::before{content:'▾'}.draft-identity{flex:1;min-width:0}.draft-identity h3{margin:0 0 4px}.draft-identity p{margin:0;font-size:.85rem;color:#526174}.draft-toggle{font-size:.85rem;color:#0f4184;flex-shrink:0}.draft-details[open]>summary{margin-bottom:18px}.draft-details>summary:focus-visible{outline:3px solid #0f4184;outline-offset:4px}@media(max-width:600px){.draft-toggle{max-width:70px;text-align:right}}

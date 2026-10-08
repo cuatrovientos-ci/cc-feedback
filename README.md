@@ -17,7 +17,7 @@ Revisión local: 8 de octubre de 2026. Mantiene **Gemini mediante Puter, recomen
 
 Servir los archivos por HTTPS (o localhost para pruebas), no abrirlos como `file://`.
 
-1. Pulsar «Conectar con Puter / Gemini». La primera pulsación carga el SDK; la segunda inicia sesión desde una acción directa para permitir la ventana de acceso.
+1. Pulsar «Conectar con Puter / Gemini». La primera pulsación muestra «Cargando servicio…» y después cambia el propio botón a «Acceder a Puter / Gemini». La segunda inicia sesión y muestra «Accediendo…» hasta terminar.
 2. Pegar celdas tabuladas con cabecera: cabecera opcional, nombre opcional, Email opcional, seis competencias y Total opcional. Sin cabecera se admite texto separado por espacios o celdas tabuladas. Si falta el nombre se usa Alumno1, Alumno2, etc.; si falta el correo se usa alumno1@example.invalid, alumno2@example.invalid, etc., marcado como ejemplo.
 3. Se admiten las nueve subcompetencias originales: Innovación, Emprendimiento, Trabajo en equipo, Comunicación oral, Comunicación escrita, Competencia digital, Adaptación al entorno, Autonomía y Responsabilidad. También las seis cabeceras `Competency 1 Level` a `Competency 6 Level`, mapeadas a las seis categorías generales del prompt original.
 4. Introducir notas 0–10 (hasta dos decimales, coma o punto), sin texto libre. Las competencias vacías no se envían. No se admiten texto libre, diagnósticos ni columnas desconocidas. Las notas no se convierten automáticamente a niveles, porque la escala original dejaba huecos.
@@ -54,3 +54,9 @@ Alumno2 6 5 4 3 4 5
 ```
 
 También se admite pegar solo las seis notas: el nombre y correo de ejemplo se generan localmente. Con cabecera tabulada se reconocen los nombres numerados del 1 al 6, con o sin acentos, y pueden omitirse las columnas Nombre y Email. Sustituir el correo de ejemplo en Gmail antes de enviar. Las direcciones example.invalid no son destinatarios reales.
+
+### Estado visible y revisión compacta
+
+Durante la generación se muestra una capa con indicador de actividad, fase (espera, recepción o comprobación), segundos transcurridos y Cancelar. No indica un porcentaje inventado. Los fallos muestran una explicación y un código de diagnóstico controlado, sin reproducir datos del proveedor; conservan la entrada en el editor para corregir o reintentar. Borrar o cancelar sí retira los datos locales; no retira una petición ya recibida por el proveedor.
+
+Los resultados aparecen colapsados por persona, con nombre y correo. Pulsar Revisar borrador abre el texto editable y la confirmación necesaria para preparar Gmail. Editar el texto vuelve a exigir revisión. Los mensajes de acceso normales aparecen en el propio botón; solo los errores aparecen aparte.
