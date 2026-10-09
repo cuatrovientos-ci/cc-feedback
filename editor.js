@@ -29,12 +29,12 @@ form.addEventListener('submit',event=>{
   try{
     pendingInput=input.value;status.className='';status.setAttribute('role','status');
     const batch=Feedback.prepare(Feedback.parseStudents(input.value));
-    if(batch.records.length>10)throw new Error('Máximo diez filas por lote local.');
+    if(batch.records.length>40)throw new Error('Máximo 40 filas por lote.');
     identities=batch.identities;records=batch.records;request=crypto.randomUUID();
     send({type:'generate',request,records,model:document.getElementById('form-select').value});
     input.value='';form.style.display='none';loading.style.display='flex';status.textContent='';form.setAttribute('aria-busy','true');progress('waiting');started=Date.now();document.getElementById('elapsed').textContent='Tiempo transcurrido: 0 s';elapsedTimer=setInterval(()=>{document.getElementById('elapsed').textContent=`Tiempo transcurrido: ${Math.floor((Date.now()-started)/1000)} s`;},1000);
     timeout=setTimeout(()=>fail('timeout'),600000);
-  }catch{status.textContent='Máximo diez filas. Revisa cabeceras, columnas, correos y valores. Sin cabecera, escribe seis notas, con nombre opcional numéricas 0–10, con total opcional; no se ha enviado esta tabla.';}
+  }catch{status.textContent='Máximo 40 filas por lote. Revisa cabeceras, columnas, correos y valores. Sin cabecera, escribe seis notas, con nombre opcional numéricas 0–10, con total opcional; no se ha enviado esta tabla.';}
 });
 window.addEventListener('message',event=>{
   if(event.source!==parent||!request||event.data?.request!==request)return;

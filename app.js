@@ -407,7 +407,7 @@ window.addEventListener('message', async ({source, data}) => {
   const request = data.request;
   try {
     const records = Feedback.validateRecords(data.records);
-    if (records.length > 10) throw new Error('Batch too large');
+    if (records.length > 40) throw new Error('Batch too large');
 
     busy = true;
     active = request;
