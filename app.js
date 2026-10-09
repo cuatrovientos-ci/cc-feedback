@@ -82,6 +82,28 @@ async function downloadModelToMemoryBlob(url, modelName) {
   return new Blob(chunks);
 }
 
+function extractJsonArray(raw) {
+  let text = String(raw || '').trim();
+  // 1. Extraer bloque markdown ```json ... ``` si existe
+  const codeMatch = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(text);
+  if (codeMatch) text = codeMatch[1].trim();
+
+  // 2. Extraer array JSON [ ... ]
+  const firstBracket = text.indexOf('[');
+  const lastBracket = text.lastIndexOf(']');
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    return text.slice(firstBracket, lastBracket + 1);
+  }
+
+  // 3. Si el modelo devolvió un único objeto { ... } en vez de array, envolverlo
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    return `[${text.slice(firstBrace, lastBrace + 1)}]`;
+  }
+  return text;
+}
+
 button.addEventListener('click', async () => {
   connection.hidden = true;
   if (!window.WebAssembly || !window.isSecureContext) {
@@ -111,7 +133,6 @@ button.addEventListener('click', async () => {
     state(`Conectando con ${cfg.name}…`, true);
 
     try {
-      // 1. Intento primario: usar caché en disco OPFS
       await wllama.loadModelFromUrl(cfg.url, {
         n_ctx: 2048,
         progressCallback: ({ loaded, total }) => {
@@ -121,7 +142,6 @@ button.addEventListener('click', async () => {
       });
     } catch (cacheErr) {
       const errText = String(cacheErr?.message || cacheErr);
-      // 2. Si falla por cuota de almacenamiento o espacio en disco (OPFS), descargar directo a memoria RAM como Blob
       if (errText.includes('space') || errText.includes('write') || errText.includes('FileSystem') || errText.includes('Quota')) {
         console.warn('Almacenamiento OPFS sin cuota suficiente. Fallback a descarga directa en memoria RAM:', errText);
         const blob = await downloadModelToMemoryBlob(cfg.url, cfg.name);
@@ -197,12 +217,15 @@ window.addEventListener('message', async ({source, origin, data}) => {
 
       send({type: 'progress', request, stage: 'waiting', current: i + 1, total: records.length});
 
-      const promptText = 'Sé conciso: introducción y cierre de una frase; valoración y recomendación de una o dos frases por competencia.\n' + Feedback.prompt([record], rubrics);
+      const promptContent = Feedback.prompt([record], rubrics);
 
       const response = await wllama.createChatCompletion({
-        messages: [{ role: 'user', content: promptText }],
-        n_predict: 1536,
-        sampling: { temp: 0.3 },
+        messages: [
+          { role: 'system', content: 'Eres un evaluador educativo constructivo. Tu respuesta debe ser ÚNICAMENTE un array JSON válido sin ningún texto explicativo previo ni posterior.' },
+          { role: 'user', content: promptContent }
+        ],
+        max_tokens: 1536,
+        temperature: 0.2,
         onData: () => {
           if (aborted || active !== request) return;
           send({type: 'progress', request, stage: 'receiving', current: i + 1, total: records.length});
@@ -211,14 +234,16 @@ window.addEventListener('message', async ({source, origin, data}) => {
 
       if (aborted || active !== request) throw new Error('aborted');
       const raw = response?.choices?.[0]?.message?.content || '';
-      result.push(...Feedback.response(raw, [record]));
+      console.log('Salida sin procesar de Wllama (fila ' + (i + 1) + '):', raw);
+      const cleanJson = extractJsonArray(raw);
+      result.push(...Feedback.response(cleanJson, [record]));
     }
 
     if (active === request) {
       send({type: 'result', request, result: Feedback.response(JSON.stringify(result), records)});
     }
   } catch (err) {
-    console.error('Error en generación Wllama:', err);
+    console.error('Error detallado en generación Wllama:', err);
     if (active === request) {
       send({type: 'failure', request, code: 'invalid_response'});
     }
