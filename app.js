@@ -422,7 +422,8 @@ window.addEventListener('message', async ({source, data}) => {
       send({type: 'progress', request, stage: 'waiting', current: i + 1, total: records.length});
 
       let raw = '';
-      if (aiLoaded && wllama) {
+      const useAI = (data?.model === 'qwen-cpu') && aiLoaded && wllama;
+      if (useAI) {
         try {
           const promptContent = buildCompactPrompt(record);
           const response = await wllama.createChatCompletion({
