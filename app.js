@@ -9,9 +9,11 @@ const unload = document.getElementById('unload');
 let wllama = null, ready = false, busy = false, active = null, abortGeneration = null, loadTimer = null;
 
 const MODELS = {
-  'qwen-1.5b': { repo: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', name: 'Qwen 2.5 1.5B' },
-  'qwen-0.5b': { repo: 'Qwen/Qwen2.5-0.5B-Instruct-GGUF', file: 'qwen2.5-0.5b-instruct-q4_k_m.gguf', name: 'Qwen 2.5 0.5B' }
+  'qwen-0.5b': { repo: 'Qwen/Qwen2.5-0.5B-Instruct-GGUF', file: 'qwen2.5-0.5b-instruct-q4_k_m.gguf', name: 'Qwen 2.5 0.5B (398 MB)' },
+  'qwen-1.5b': { repo: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', name: 'Qwen 2.5 1.5B (1.1 GB)' }
 };
+
+let selectedModel = 'qwen-0.5b';
 
 function state(text, working = false) {
   label.textContent = text;
@@ -41,17 +43,18 @@ async function stop() {
   state('Cargar modelo Wllama');
 }
 
-function error(code) {
+function error(code, detail = '') {
   const request = active;
   stop();
   if (request) send({type: 'failure', request, code});
   connection.hidden = false;
-  connection.textContent = ({
+  const msg = ({
     unsupported: 'Este navegador o equipo no soporta WebAssembly. Usa un navegador moderno actualizado.',
     timeout: 'La carga o descarga del modelo ha superado diez minutos. Comprueba la conexión y vuelve a intentarlo.',
     model: 'No se pudo cargar o ejecutar el modelo local con Wllama. Comprueba la conexión y la memoria disponible; cierra otras pestañas y reintenta.',
     cancelled: 'Generación cancelada por el usuario.'
   })[code] || 'No se pudo completar la generación local con Wllama. Vuelve a cargar el modelo.';
+  connection.textContent = detail ? `${msg} [Detalle: ${detail}]` : msg;
 }
 
 button.addEventListener('click', async () => {
@@ -61,9 +64,9 @@ button.addEventListener('click', async () => {
     return;
   }
   await stop();
-  state('Descargando Wllama (WASM)…', true);
+  state('Iniciando runtime Wllama…', true);
   try {
-    loadTimer = setTimeout(() => { error('timeout'); }, 600000);
+    loadTimer = setTimeout(() => { error('timeout', 'Tiempo de espera agotado'); }, 600000);
 
     const { Wllama } = await import('https://cdn.jsdelivr.net/npm/@wllama/wllama@2.2.1/esm/index.js');
     const { default: WasmFromCDN } = await import('https://cdn.jsdelivr.net/npm/@wllama/wllama@2.2.1/esm/wasm-from-cdn.js');
@@ -71,12 +74,11 @@ button.addEventListener('click', async () => {
     wllama = new Wllama(WasmFromCDN);
     unload.disabled = false;
 
-    // Modelo predeterminado: Qwen 2.5 1.5B Instruct GGUF Q4_K_M
-    const modelKey = 'qwen-1.5b';
-    const cfg = MODELS[modelKey];
+    const cfg = MODELS[selectedModel] || MODELS['qwen-0.5b'];
+    state(`Conectando con ${cfg.name}…`, true);
 
     await wllama.loadModelFromHF(cfg.repo, cfg.file, {
-      n_ctx: 4096,
+      n_ctx: 2048,
       progressCallback: ({ loaded, total }) => {
         const pct = total ? Math.min(100, Math.max(0, Math.round((loaded / total) * 100))) : 0;
         state(`Descargando ${cfg.name}: ${pct} %`, true);
@@ -85,9 +87,10 @@ button.addEventListener('click', async () => {
 
     clearTimeout(loadTimer);
     ready = true;
-    state('Modelo Wllama listo');
-  } catch {
-    error('model');
+    state(`Modelo listo: ${cfg.name}`);
+  } catch (err) {
+    console.error('Error al inicializar Wllama:', err);
+    error('model', err?.message || String(err));
   }
 });
 
@@ -104,6 +107,10 @@ window.addEventListener('pagehide', stop);
 
 window.addEventListener('message', async ({source, origin, data}) => {
   if (source !== frame.contentWindow || origin !== 'null') return;
+  if (data?.type === 'model-select' && typeof data.model === 'string') {
+    if (MODELS[data.model]) selectedModel = data.model;
+    return;
+  }
   if (data?.type === 'cancel') {
     if (busy && abortGeneration) abortGeneration();
     busy = false;
@@ -111,6 +118,9 @@ window.addEventListener('message', async ({source, origin, data}) => {
     return;
   }
   if (data?.type !== 'generate' || typeof data.request !== 'string') return;
+  if (data.model && MODELS[data.model]) {
+    selectedModel = data.model;
+  }
   if (!ready || !wllama || busy) {
     send({type: 'failure', request: data.request, code: ready ? 'busy' : 'not_connected'});
     return;
@@ -163,7 +173,8 @@ window.addEventListener('message', async ({source, origin, data}) => {
     if (active === request) {
       send({type: 'result', request, result: Feedback.response(JSON.stringify(result), records)});
     }
-  } catch {
+  } catch (err) {
+    console.error('Error en generación Wllama:', err);
     if (active === request) {
       send({type: 'failure', request, code: 'invalid_response'});
     }

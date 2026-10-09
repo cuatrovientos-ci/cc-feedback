@@ -21,6 +21,7 @@ function expire(){if(Date.now()-last>=900000)reset('Datos retirados por inactivi
 setInterval(expire,15000);document.addEventListener('visibilitychange',expire);window.addEventListener('pagehide',()=>reset());window.addEventListener('pageshow',e=>{if(e.persisted)reset();});
 ['clear','erase','cancel-loading'].forEach(id=>document.getElementById(id).addEventListener('click',()=>reset('Datos locales retirados. Los correos ya abiertos en Gmail no se eliminan.')));
 document.getElementById('example').addEventListener('click',()=>{reset();input.value='Alumno1 5 5 6 4 6 7\nAlumno2 6 5 4 3 4 5';});
+document.getElementById('form-select').addEventListener('change',e=>send({type:'model-select',model:e.target.value}));
 function node(tag,text,cls){const n=document.createElement(tag);if(text)n.textContent=text;if(cls)n.className=cls;return n;}
 form.addEventListener('submit',event=>{
   event.preventDefault();
