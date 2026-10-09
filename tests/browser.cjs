@@ -1,31 +1,71 @@
-const {chromium}=require('playwright');const http=require('node:http');const fs=require('node:fs');const path=require('node:path');const assert=require('node:assert/strict');
+const {chromium}=require('playwright');
+const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..');
-const publicFiles=['index.html','editor.html','style.css','shell.css','core.js','app.js','editor.js','rubricas.js','privacidad.html','assets/bootstrap.min.css'];
-const server=http.createServer((req,res)=>{const name=req.url==='/'?'index.html':req.url.slice(1);if(!publicFiles.includes(name)){res.writeHead(404);return res.end();}res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript; charset=utf-8':name.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8');res.end(fs.readFileSync(path.join(root,name)));});
-(async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
-try{
- browser=await chromium.launch({headless:true,...(process.env.CC_BROWSER?{executablePath:process.env.CC_BROWSER}:{})});const context=await browser.newContext();const page=await context.newPage();const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.log('PAGE ERROR',e.message);});page.on('console',m=>{if(m.type()==='error')console.log('BROWSER ERROR',m.text());});let gmailURL='';
- await context.route('https://mail.google.com/**',route=>{gmailURL=route.request().url();return route.abort();});
- await context.route('https://js.puter.com/v2/',route=>route.fulfill({contentType:'text/javascript',body:`window.sent=[];window.puter={auth:{signIn:async()=>{if(window.authFailure)throw {error:window.authFailure};}},ai:{chat:async function*(prompt){window.sent.push(prompt);if(window.hold)await new Promise(resolve=>window.release=resolve);if(window.aiFailure)throw {code:window.aiFailure};const records=JSON.parse(prompt.split('\\nRegistros: ')[1]);const out=records.slice().reverse().map(r=>({id:r.id,intro:'Texto de IA',competencias_evaluadas:r.competencias.map(c=>({nombre_competencia:c.competencia,rubrica:'Valoración de IA',recomendaciones:'Consejo personalizado de IA'})),conclusion:'Cierre de IA'}));yield {text:JSON.stringify(out)};}}};`}));
- await page.clock.install();await page.goto(`http://127.0.0.1:${server.address().port}`);const frame=page.frameLocator('#editor');
- assert.equal(await page.locator('#editor').getAttribute('sandbox'),'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
- await frame.locator('#data').fill('5 5 6 4 6 7');await frame.locator('button[type=submit]').click();await frame.getByText('[GENERACION_NOT_CONNECTED]',{exact:false}).waitFor();assert.equal(await frame.locator('#data').inputValue(),'5 5 6 4 6 7');
- await page.locator('#connect').click();await page.getByRole('button',{name:'Acceder a Puter / Gemini',exact:true}).waitFor();assert.equal(await page.locator('#connection').isVisible(),false);
- await page.evaluate(()=>window.authFailure='popup_blocked');await page.locator('#connect').click();await page.getByText('[ACCESO_POPUP_BLOCKED]',{exact:false}).waitFor();await page.evaluate(()=>window.authFailure=null);
- await page.locator('#connect').click();await page.getByRole('button',{name:'Conectado con Puter / Gemini',exact:true}).waitFor();assert.equal(await page.locator('#connection').isVisible(),false);
- assert.equal(await page.evaluate(()=>{try{document.querySelector('iframe').contentWindow.document.body;return false;}catch{return true;}}),true,'SDK cannot access identities DOM');
- await page.evaluate(()=>window.hold=true);await frame.locator('#data').fill('Nombre\tEmail\tInnovación\tTotal\nIDENTIDAD_SECRETA\tsecreto@example.es\t7,5\t9\nOTRA_PERSONA\totro@example.es\t4\t5');await frame.locator('button[type=submit]').click();await frame.locator('#loading-overlay').waitFor();assert.equal(await frame.locator('#loading-overlay').isVisible(),true);await page.waitForFunction(()=>typeof window.release==='function');await page.clock.fastForward(3000);assert.ok((await frame.locator('#elapsed').textContent()).includes('3 s'));await page.evaluate(()=>{window.hold=false;window.release();});await frame.locator('article').first().waitFor();assert.equal(await frame.locator('#loading-overlay').isVisible(),false);
- const prompt=(await page.evaluate(()=>sent))[0];assert.ok(!prompt.includes('IDENTIDAD_SECRETA'));assert.ok(!prompt.includes('secreto@example.es'));assert.ok(!prompt.includes('OTRA_PERSONA'));
- const first=frame.locator('article').first();assert.equal(await first.locator('h3').textContent(),'OTRA_PERSONA');assert.ok((await first.locator('textarea').inputValue()).includes('Consejo personalizado de IA'));assert.ok((await first.locator('textarea').inputValue()).includes('Calificación: 4'));
- assert.equal(await first.locator('details').getAttribute('open'),null);assert.equal(await first.locator('textarea').isVisible(),false);await first.locator('summary').click();assert.equal(await first.locator('textarea').isVisible(),true);assert.equal(await first.locator('button').isDisabled(),true);await first.locator('input[type=checkbox]').check();await first.locator('textarea').fill('Texto revisado');assert.equal(await first.locator('button').isDisabled(),true);await first.locator('input[type=checkbox]').check();const popup=context.waitForEvent('page');await first.locator('button').click();const p=await popup;await p.waitForLoadState().catch(()=>{});assert.equal(new URL(gmailURL).searchParams.get('to'),'otro@example.es');assert.equal(new URL(gmailURL).searchParams.get('body'),'Texto revisado');await p.close();
- await page.clock.fastForward(16*60*1000);assert.equal(await frame.locator('article').count(),0);
- await frame.locator('#data').fill('Nombre\tInnovación\n<img src=x onerror=alert(1)>\t8');await frame.locator('button[type=submit]').click();await frame.locator('article').first().waitFor();assert.equal(await frame.locator('article img').count(),0);assert.ok(!((await page.evaluate(()=>sent))[1]).includes('<img'));
- const before=await page.evaluate(()=>sent.length);await frame.locator('#erase').click();await frame.locator('#data').fill('Nombre\tInnovación\tDiagnóstico\nA\t7\tprivado');await frame.locator('button[type=submit]').click();assert.equal(await page.evaluate(()=>sent.length),before);
- await frame.locator('#erase').click();await frame.locator('#data').fill('5 5 6 4 6 7\n6 5 4 3 4 5');await frame.locator('button[type=submit]').click();await frame.locator('article').first().waitFor();assert.equal(await frame.locator('article').count(),2);assert.equal(await frame.locator('article h3').first().textContent(),'Alumno2');assert.ok((await frame.locator('article').first().textContent()).includes('alumno2@example.invalid'));assert.ok(!(await page.evaluate(()=>sent.at(-1))).includes('example.invalid'));
- if(process.env.CC_SCREENSHOTS){fs.mkdirSync(process.env.CC_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.CC_SCREENSHOTS,'ia-desktop.png'),fullPage:true});}
- await page.setViewportSize({width:390,height:844});assert.equal(await frame.locator('body').evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.equal(await frame.locator('.result-text').first().isVisible(),false);if(process.env.CC_SCREENSHOTS)await page.screenshot({path:path.join(process.env.CC_SCREENSHOTS,'ia-mobile.png'),fullPage:true});
- await frame.locator('#erase').click();await page.evaluate(()=>window.aiFailure='insufficient_funds');await frame.locator('#data').fill('5 5 6 4 6 7');await frame.locator('button[type=submit]').click();await frame.getByText('[GENERACION_QUOTA]',{exact:false}).waitFor();assert.equal(await frame.locator('#data').inputValue(),'5 5 6 4 6 7');assert.equal(await frame.locator('#loading-overlay').isVisible(),false);
- await page.evaluate(()=>{window.aiFailure=null;window.hold=true;});await frame.locator('button[type=submit]').click();await frame.locator('#loading-overlay').waitFor();await frame.locator('#cancel-loading').click();assert.equal(await frame.locator('#data').inputValue(),'');assert.equal(await frame.locator('#loading-overlay').isVisible(),false);await page.evaluate(()=>{window.hold=false;window.release();});assert.equal(await frame.locator('article').count(),0);
- assert.deepEqual(errors,[]);console.log('Browser passed with mocked provider: isolated identity DOM, no identifiers in prompt, AI recommendations, shuffled identity mapping, review, Gmail, idle erasure, XSS text, rejection before sending. No real AI calls.');
-}finally{if(browser)await browser.close();server.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
-
+const files=new Set(['index.html','editor.html','style.css','shell.css','core.js','app.js','editor.js','rubricas.js','llm-worker.js','privacidad.html','assets/bootstrap.min.css']);
+const server=http.createServer((req,res)=>{
+ const name=req.url==='/'?'index.html':req.url.slice(1);
+ if(!files.has(name)){res.writeHead(404);return res.end();}
+ res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');
+ res.end(fs.readFileSync(path.join(root,name)));
+});
+const fake=String.raw`
+export async function CreateMLCEngine(model,options,config){
+ if(model!=='Qwen2.5-1.5B-Instruct-q4f32_1-MLC'||config.context_window_size!==8192)throw Error('config');
+ options.initProgressCallback({progress:0.5});
+ return {resetChat:async()=>{},chat:{completions:{create:async function*(args){
+  const text=args.messages[0].content;
+  if(text.includes('IDENTIDAD_SECRETA')||text.includes('secreto@example.es'))throw Error('identity leak');
+  const records=JSON.parse(text.split('\nRegistros: ')[1]);
+  if(records.length!==1||args.response_format.type!=='json_object')throw Error('invalid batch');
+  const r=records[0];
+  if(r.competencias[0].valor===9)await new Promise(resolve=>setTimeout(resolve,2000));
+  if(r.competencias[0].valor===0){yield {choices:[{delta:{content:'{}'}}]};return;}
+  yield {choices:[{delta:{content:JSON.stringify([{id:r.id,intro:'Texto local de prueba',competencias_evaluadas:r.competencias.map(c=>({nombre_competencia:c.competencia,rubrica:'Valoración local',recomendaciones:'Consejo local de prueba'})),conclusion:'Cierre local'}])}}]};
+ }}}};
+}`;
+(async()=>{
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
+ try{
+  browser=await chromium.launch({headless:true,...(process.env.CC_BROWSER?{executablePath:process.env.CC_BROWSER}:{})});
+  const context=await browser.newContext();
+  await context.addInitScript(()=>Object.defineProperty(navigator,'gpu',{value:{},configurable:true}));
+  let failLoad=false,downloads=0,gmail='';const external=[];
+  await context.route('https://esm.run/@mlc-ai/web-llm@0.2.85',route=>{downloads++;return route.fulfill({contentType:'text/javascript',body:failLoad?'throw Error("load failed");':fake});});
+  await context.route('https://mail.google.com/**',route=>{gmail=route.request().url();return route.abort();});
+  context.on('request',r=>{if(r.url().startsWith('https://'))external.push(r.url());});
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const url=`http://127.0.0.1:${server.address().port}/`;await page.clock.install();await page.goto(url);
+  const frame=page.frameLocator('#editor');assert.equal(downloads,0);
+  await frame.locator('#data').fill('1 2 3 4 5 6');await frame.locator('button[type=submit]').click();
+  await frame.getByText('[GENERACION_NOT_CONNECTED]',{exact:false}).waitFor();
+  assert.equal(await frame.locator('#data').inputValue(),'1 2 3 4 5 6');
+  await page.locator('#connect').click();await page.getByRole('button',{name:'Modelo local listo',exact:true}).waitFor();
+  assert.equal(downloads,1);
+  assert.equal(await page.evaluate(()=>{try{document.querySelector('iframe').contentWindow.document.body;return false;}catch{return true;}}),true);
+  await frame.locator('#data').fill('Nombre\tEmail\tInnovación\tTotal\nIDENTIDAD_SECRETA\tsecreto@example.es\t7\t8');
+  await frame.locator('button[type=submit]').click();await frame.locator('article').waitFor();
+  const card=frame.locator('article');assert.equal(await card.locator('details').getAttribute('open'),null);
+  await card.locator('summary').click();assert.ok((await card.locator('textarea').inputValue()).includes('Consejo local'));
+  assert.equal(await card.locator('button').isDisabled(),true);await card.locator('input').check();
+  await card.locator('textarea').fill('Texto revisado');assert.equal(await card.locator('button').isDisabled(),true);
+  await card.locator('input').check();const popup=context.waitForEvent('page');await card.locator('button').click();const mail=await popup;await mail.waitForLoadState().catch(()=>{});await mail.close();
+  assert.equal(new URL(gmail).searchParams.get('to'),'secreto@example.es');
+  assert.equal(new URL(gmail).searchParams.get('body'),'Texto revisado');
+  await frame.locator('#erase').click();await frame.locator('#data').fill('1 2 3 4 5 6\n2 3 4 3 2 2');
+  await frame.locator('button[type=submit]').click();await frame.locator('article').nth(1).waitFor();assert.equal(await frame.locator('article').count(),2);
+  await page.setViewportSize({width:390,height:844});assert.equal(await frame.locator('body').evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  if(process.env.CC_SCREENSHOTS){fs.mkdirSync(process.env.CC_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.CC_SCREENSHOTS,'webllm-mobile.png'),fullPage:true});}
+  await frame.locator('#erase').click();await frame.locator('#data').fill('0 2 3 4 5 6');await frame.locator('button[type=submit]').click();await frame.getByText('[GENERACION_INVALID_RESPONSE]',{exact:false}).waitFor();assert.equal(await frame.locator('article').count(),0);
+  await frame.locator('#data').fill('9 2 3 4 5 6');await frame.locator('button[type=submit]').click();await frame.locator('#loading-overlay').waitFor();await frame.locator('#cancel-loading').click();
+  await page.getByRole('button',{name:'Cargar modelo local',exact:true}).waitFor();assert.equal(await frame.locator('#data').inputValue(),'');
+  await page.locator('#connect').click();await page.getByRole('button',{name:'Modelo local listo',exact:true}).waitFor();
+  await frame.locator('#data').fill('1 2 3 4 5 6');await frame.locator('button[type=submit]').click();await frame.locator('article').waitFor();
+  await page.clock.fastForward(16*60*1000);assert.equal(await frame.locator('article').count(),0);
+  await page.locator('#unload').click();failLoad=true;await page.locator('#connect').click();await page.getByText('No se pudo cargar o ejecutar',{exact:false}).waitFor();
+  assert.ok(external.every(u=>u.startsWith('https://esm.run/')||u.startsWith('https://mail.google.com/')));
+  assert.deepEqual(errors,[]);
+  const unsupported=await browser.newContext();await unsupported.addInitScript(()=>Object.defineProperty(navigator,'gpu',{value:undefined,configurable:true}));
+  const other=await unsupported.newPage();await other.goto(url);await other.locator('#connect').click();await other.getByText('no ofrece WebGPU',{exact:false}).waitFor();
+  console.log('PASS: real worker with simulated WebLLM module; isolation, local results, Gmail review, batches, errors, cancellation/reload, idle cleanup, unsupported WebGPU and mobile layout. No real model inference.');
+ }finally{if(browser)await browser.close();server.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

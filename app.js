@@ -1,63 +1,70 @@
-'use strict';
-const frame=document.getElementById('editor');
-const connection=document.getElementById('connection');
-const models=new Set(['google/gemini-2.5-flash','google/gemini-3-flash-preview']);
-let ready=false,busy=false,epoch=0,loading;
-const button=document.getElementById('connect'),label=document.getElementById('connect-label'),spinner=document.getElementById('connect-spinner');
-function buttonState(text,working=false){label.textContent=text;spinner.hidden=!working;button.disabled=working;button.setAttribute('aria-busy',String(working));}
-function deadline(promise,ms){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject({code:'timeout'}),ms);})]).finally(()=>clearTimeout(timer));}
-function failureCode(error){
-  const code=String(error?.error?.code||error?.error||error?.code||'').toLowerCase();
-  if(['popup_blocked','auth_window_closed','unsupported_origin','timeout'].includes(code))return code;
-  if(/auth|unauthorized|token/.test(code))return 'auth';
-  if(/rate|quota|limit|fund|credit|balance/.test(code))return 'quota';
-  if(/model|not_found/.test(code))return 'model';
-  if(/network|fetch|connection/.test(code))return 'network';
-  return 'provider';
+"use strict";
+const frame = document.getElementById('editor');
+const connection = document.getElementById('connection');
+const button = document.getElementById('connect');
+const label = document.getElementById('connect-label');
+const spinner = document.getElementById('connect-spinner');
+const unload = document.getElementById('unload');
+let worker = null, ready = false, busy = false, active = null, loadTimer;
+function state(text, working = false) {
+  label.textContent = text; spinner.hidden = !working; button.disabled = working || ready;
+  button.setAttribute('aria-busy', String(working)); unload.disabled = !worker;
 }
-const authErrors={popup_blocked:'El navegador ha bloqueado la ventana de acceso. Permite las ventanas emergentes y pulsa Acceder.',auth_window_closed:'Se cerró la ventana de acceso sin completar la sesión. Pulsa Acceder para intentarlo de nuevo.',unsupported_origin:'Puter no admite este origen. Abre la web publicada por HTTPS.',timeout:'El acceso está tardando demasiado. Cierra la ventana anterior y vuelve a pulsar Acceder.'};
-function loadSDK(){
-  if(!loading) loading=new Promise((resolve,reject)=>{
-    const script=document.createElement('script');script.src='https://js.puter.com/v2/';
-    const timer=setTimeout(()=>{loading=null;script.remove();reject({code:'timeout'});},20000);
-    script.onload=()=>{clearTimeout(timer);resolve();};script.onerror=()=>{clearTimeout(timer);loading=null;script.remove();reject({code:'network'});};document.head.append(script);
-  });return loading;
+function send(message) { frame.contentWindow.postMessage(message, '*'); }
+function stop() {
+  clearTimeout(loadTimer); if (worker) worker.terminate();
+  worker = null; ready = false; busy = false; active = null;
+  state('Cargar modelo local');
 }
-button.addEventListener('click',async()=>{
-  connection.hidden=true;
-  const loadingSDK=!globalThis.puter;
-  try{
-    buttonState(loadingSDK?'Cargando servicio…':'Accediendo…',true);
-    if(loadingSDK){await loadSDK();buttonState('Acceder a Puter / Gemini');return;}
-    await deadline(puter.auth.signIn(),60000);ready=true;buttonState('Conectado con Puter / Gemini');
-  }catch(error){
-    ready=false;const code=failureCode(error);buttonState(globalThis.puter?'Acceder a Puter / Gemini':'Reintentar conexión');
-    connection.textContent=(authErrors[code]||'No se pudo conectar con Puter. Comprueba la conexión y vuelve a intentarlo.')+' [ACCESO_'+code.toUpperCase()+']';connection.hidden=false;
-  }
+function error(code) {
+  const request = active;
+  stop();
+  if (request) send({type: 'failure', request, code});
+  connection.hidden = false;
+  connection.textContent = ({unsupported: 'Este navegador o equipo no ofrece WebGPU. Usa un navegador compatible con aceleración gráfica.',
+    timeout: 'La carga ha superado diez minutos. Comprueba la conexión y vuelve a intentarlo.',
+    model: 'No se pudo cargar o ejecutar el modelo local. Comprueba la conexión y la memoria disponible; cierra otras pestañas y reintenta.'})[code] || 'No se pudo completar la generación local. Vuelve a cargar el modelo.';
+}
+button.addEventListener('click', async () => {
+  connection.hidden = true;
+  if (!navigator.gpu || !window.isSecureContext) { error('unsupported'); return; }
+  stop(); state('Descargando y preparando modelo…', true);
+  try {
+    const current = new Worker('llm-worker.js', {type: 'module'}); worker = current; unload.disabled = false;
+    loadTimer = setTimeout(() => { if (worker === current) error('timeout'); }, 600000);
+    current.onerror = () => { if (worker === current) error('model'); };
+    current.onmessage = ({data}) => {
+      if (worker !== current) return;
+      if (data.type === 'load-progress') {
+        const n = Math.max(0, Math.min(100, Math.round(Number(data.progress || 0) * 100)));
+        state(`Preparando modelo local: ${n} %`, true); return;
+      }
+      if (data.type === 'ready') { clearTimeout(loadTimer); ready = true; state('Modelo local listo'); return; }
+      if (data.type === 'load-error') { error(data.code); return; }
+      if (!active || data.request !== active) return;
+      if (data.type === 'result' || data.type === 'failure') { busy = false; active = null; }
+      send(data);
+    };
+    current.postMessage({type: 'load'});
+  } catch { error('model'); }
 });
-frame.addEventListener('load',()=>{epoch++;busy=false;});
-function send(message){frame.contentWindow.postMessage(message,'*');}
-window.addEventListener('message',async event=>{
-  if(event.source!==frame.contentWindow||event.origin!=='null')return;
-  const data=event.data;
-  if(data?.type==='cancel'){epoch++;busy=false;return;}
-  if(data?.type!=='generate'||typeof data.request!=='string'||!models.has(data.model))return;
-  if(!ready||busy){send({type:'failure',request:data.request,code:!ready?'not_connected':'busy'});return;}
-  const run=++epoch;busy=true;let stage='request';
-  send({type:'progress',request:data.request,stage:'waiting'});
-  try{
-    const records=Feedback.validateRecords(data.records);
-    const stream=await puter.ai.chat(Feedback.prompt(records,RUBRICS),{model:data.model,stream:true,responseMimeType:'application/json'});
-    let raw='';
-    for await(const part of stream){
-      if(run!==epoch)return;
-      if(part?.error)throw part.error;
-      if(typeof part?.text==='string' && part.text){raw+=part.text;send({type:'progress',request:data.request,stage:'receiving'});}
-      if(raw.length>500000)throw new Error('Limit');
-    }
-    stage='response';send({type:'progress',request:data.request,stage:'validating'});
-    const result=Feedback.response(raw,records);
-    if(run===epoch)send({type:'result',request:data.request,result});
-  }catch(error){if(run===epoch)send({type:'failure',request:data.request,code:stage==='response'?'invalid_response':failureCode(error)});}
-  finally{if(run===epoch)busy=false;}
+unload.addEventListener('click', () => {
+  const request = active; stop();
+  if (request) send({type: 'failure', request, code: 'cancelled'});
+  connection.hidden = false; connection.textContent = 'Modelo descargado de memoria. Los archivos del modelo pueden seguir en la caché del navegador.';
 });
+frame.addEventListener('load', () => { if (busy) stop(); });
+window.addEventListener('pagehide', stop);
+window.addEventListener('message', ({source, origin, data}) => {
+  if (source !== frame.contentWindow || origin !== 'null') return;
+  if (data?.type === 'cancel') { if (busy) stop(); return; }
+  if (data?.type !== 'generate' || typeof data.request !== 'string') return;
+  if (!ready || busy) { send({type: 'failure', request: data.request, code: ready ? 'busy' : 'not_connected'}); return; }
+  try {
+    const records = Feedback.validateRecords(data.records);
+    if (records.length > 10) throw new Error('Batch too large');
+    busy = true; active = data.request;
+    worker.postMessage({type: 'generate', request: active, records});
+  } catch { send({type: 'failure', request: data.request, code: 'invalid_input'}); }
+});
+state('Cargar modelo local');

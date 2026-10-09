@@ -7,19 +7,19 @@ function send(data){parent.postMessage(data,parentOrigin);}
 function reset(message=''){
   last=Date.now();clearInterval(elapsedTimer);pendingInput='';form.setAttribute('aria-busy','false');clearTimeout(timeout);request=null;identities.clear();records=[];input.value='';list.querySelectorAll('textarea').forEach(t=>t.value='');list.replaceChildren();results.style.display='none';loading.style.display='none';form.style.display='block';status.textContent=message;send({type:'cancel'});
 }
-const failures={not_connected:'Primero pulsa Acceder a Puter / Gemini en el botón superior y completa el acceso.',busy:'Ya hay una generación en curso. Espera o cancélala.',auth:'La sesión de Puter no es válida. Vuelve a acceder con el botón superior.',quota:'Puter ha indicado un límite de uso o saldo. Revisa tu cuenta antes de volver a generar.',model:'El modelo seleccionado no está disponible para esta petición. Prueba el otro modelo.',network:'Se ha interrumpido la conexión. Comprueba la red y vuelve a intentarlo.',provider:'Puter o el modelo no han completado la petición. Puedes intentarlo de nuevo o probar el otro modelo.',invalid_response:'La IA devolvió una respuesta incompleta o con un formato que no coincide con los alumnos. No se han preparado correos. Prueba con menos filas o con el otro modelo.',timeout:'Se ha agotado el tiempo de espera. La petición anterior podría seguir procesándose en el proveedor.'};
+const failures={not_connected:'Primero carga el modelo local con el botón superior.',busy:'Ya hay una generación en curso.',cancelled:'Generación detenida. Carga el modelo de nuevo para reintentar.',invalid_input:'Usa como máximo diez filas válidas por lote.',model:'No se pudo ejecutar el modelo en este equipo.',provider:'El modelo local no pudo completar la generación.',invalid_response:'El modelo local devolvió un formato incompleto. No se han preparado correos. Reintenta con menos filas.',timeout:'Se ha agotado el tiempo por fila. Se detendrá el modelo local; puedes volver a cargarlo.'};
 function fail(code){
   const retained=pendingInput;const safe=Object.hasOwn(failures,code)?code:'provider';
   reset(failures[safe]+' [GENERACION_'+safe.toUpperCase()+']');input.value=retained;
   status.className='alert alert-danger';status.setAttribute('role','alert');status.tabIndex=-1;status.focus();status.scrollIntoView({block:'center'});
 }
 function progress(stage){
-  document.getElementById('progress-detail').textContent=({waiting:'Esperando la respuesta de Gemini…',receiving:'Recibiendo las recomendaciones…',validating:'Comprobando que cada respuesta corresponde a su alumno…'})[stage]||'Generando recomendaciones…';
+  document.getElementById('progress-detail').textContent=({waiting:'Generando en este dispositivo…',receiving:'Recibiendo las recomendaciones…',validating:'Comprobando que cada respuesta corresponde a su alumno…'})[stage]||'Generando recomendaciones…';
 }
 function expire(){if(Date.now()-last>=900000)reset('Datos retirados por inactividad.');}
 ['pointerdown','keydown','input'].forEach(type=>document.addEventListener(type,()=>{expire();last=Date.now();},true));
 setInterval(expire,15000);document.addEventListener('visibilitychange',expire);window.addEventListener('pagehide',()=>reset());window.addEventListener('pageshow',e=>{if(e.persisted)reset();});
-['clear','erase','cancel-loading'].forEach(id=>document.getElementById(id).addEventListener('click',()=>reset('Datos retirados. Las peticiones ya enviadas no se pueden retirar del proveedor.')));
+['clear','erase','cancel-loading'].forEach(id=>document.getElementById(id).addEventListener('click',()=>reset('Datos locales retirados. Los correos ya abiertos en Gmail no se eliminan.')));
 document.getElementById('example').addEventListener('click',()=>{reset();input.value='Alumno1 5 5 6 4 6 7\nAlumno2 6 5 4 3 4 5';});
 function node(tag,text,cls){const n=document.createElement(tag);if(text)n.textContent=text;if(cls)n.className=cls;return n;}
 form.addEventListener('submit',event=>{
@@ -28,17 +28,18 @@ form.addEventListener('submit',event=>{
   try{
     pendingInput=input.value;status.className='';status.setAttribute('role','status');
     const batch=Feedback.prepare(Feedback.parseStudents(input.value));
+    if(batch.records.length>10)throw new Error('Máximo diez filas por lote local.');
     identities=batch.identities;records=batch.records;request=crypto.randomUUID();
     send({type:'generate',request,records,model:document.getElementById('form-select').value});
     input.value='';form.style.display='none';loading.style.display='flex';status.textContent='';form.setAttribute('aria-busy','true');progress('waiting');started=Date.now();document.getElementById('elapsed').textContent='Tiempo transcurrido: 0 s';elapsedTimer=setInterval(()=>{document.getElementById('elapsed').textContent=`Tiempo transcurrido: ${Math.floor((Date.now()-started)/1000)} s`;},1000);
-    timeout=setTimeout(()=>fail('timeout'),180000);
-  }catch{status.textContent='Revisa cabeceras, columnas, correos y valores. Sin cabecera, escribe seis notas, con nombre opcional numéricas 0–10, con total opcional; no se ha enviado esta tabla.';}
+    timeout=setTimeout(()=>fail('timeout'),600000);
+  }catch{status.textContent='Máximo diez filas. Revisa cabeceras, columnas, correos y valores. Sin cabecera, escribe seis notas, con nombre opcional numéricas 0–10, con total opcional; no se ha enviado esta tabla.';}
 });
 window.addEventListener('message',event=>{
   if(event.source!==parent||event.origin!==parentOrigin||!request||event.data?.request!==request)return;
   expire();if(!request)return;
   const message=event.data;
-  if(message.type==='progress'){progress(message.stage);return;}
+  if(message.type==='progress'){progress(message.stage);if(message.current&&message.total){document.getElementById('progress-detail').textContent+=` Fila ${message.current} de ${message.total}.`;if(message.stage==='waiting'){clearTimeout(timeout);timeout=setTimeout(()=>fail('timeout'),600000);}}return;}
   if(message.type==='failure'){fail(message.code);return;}
   if(message.type!=='result')return;
   try{

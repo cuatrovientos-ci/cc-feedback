@@ -27,14 +27,13 @@
                         <h2 class="display-6 text-muted">RETROALIMENTACIÓN <span class="text-primary fw-bold">COMPETENCIAS CLAVE</span></h2>
                     </div>
 
-                    <p class="alert alert-primary">Nombres y correos permanecen en esta zona aislada. Se enviarán códigos aleatorios, competencias y notas: es seudonimización, no anonimato garantizado. Utiliza datos ficticios hasta la autorización del centro. <a href="privacidad.html" target="_blank" rel="noopener noreferrer">Privacidad</a>.</p><details class="mb-3"><summary>Formato de la tabla</summary><p>La cabecera es opcional. Sin cabecera, escribe el nombre (opcional) seguido de seis notas numéricas, separadas por espacios o tabulaciones, y Total si lo tienes. Puedes incluir correo después del nombre; si falta se usa alumno1@example.invalid, alumno2@example.invalid, etc. Son direcciones de ejemplo que debes sustituir antes de enviar.</p><p>Orden: 1. Innovación y Emprendimiento; 2. Trabajo en Equipo; 3. Capacidad Comunicativa; 4. Competencia Digital; 5. Adaptación al Entorno; 6. Autonomía y Responsabilidad; Total opcional. Se admiten decimales con coma o punto. El total no se calcula si falta. Si omites el nombre, se asigna Alumno1, Alumno2, etc., por orden de fila.</p><p>Para usar cabecera, copia las columnas desde la hoja de cálculo separadas por tabulaciones. No incluyas observaciones, diagnósticos ni otras columnas.</p></details><button id="example" class="btn btn-outline-secondary mb-3" type="button">Ejemplo ficticio</button><p id="status" role="status"></p><form id="main-form" autocomplete="off" class="card shadow-sm p-4">
+                    <p class="alert alert-primary">Nombres y correos permanecen en esta zona aislada. El modelo procesa códigos, competencias y notas en este dispositivo, sin enviarlos a un servicio de IA. El procesamiento local no garantiza anonimato. Utiliza datos ficticios hasta la autorización del centro. <a href="privacidad.html" target="_blank" rel="noopener noreferrer">Privacidad</a>.</p><details class="mb-3"><summary>Formato de la tabla</summary><p>La cabecera es opcional. Sin cabecera, escribe el nombre (opcional) seguido de seis notas numéricas, separadas por espacios o tabulaciones, y Total si lo tienes. Puedes incluir correo después del nombre; si falta se usa alumno1@example.invalid, alumno2@example.invalid, etc. Son direcciones de ejemplo que debes sustituir antes de enviar.</p><p>Orden: 1. Innovación y Emprendimiento; 2. Trabajo en Equipo; 3. Capacidad Comunicativa; 4. Competencia Digital; 5. Adaptación al Entorno; 6. Autonomía y Responsabilidad; Total opcional. Se admiten decimales con coma o punto. El total no se calcula si falta. Si omites el nombre, se asigna Alumno1, Alumno2, etc., por orden de fila.</p><p>Para usar cabecera, copia las columnas desde la hoja de cálculo separadas por tabulaciones. No incluyas observaciones, diagnósticos ni otras columnas.</p></details><button id="example" class="btn btn-outline-secondary mb-3" type="button">Ejemplo ficticio</button><p id="status" role="status"></p><form id="main-form" autocomplete="off" class="card shadow-sm p-4">
                         <div class="row mb-3">
                             <div class="col-md-4">
-                                <label class="small text-muted">Precisión de la IA:</label>
+                                <label class="small text-muted">Modelo en este dispositivo:</label>
                                 <select id="form-select" class="form-select">
-                                    <option value="google/gemini-2.5-flash">Rápido (Flash 2.5)</option>
-                                    <option value="google/gemini-3-flash-preview" selected>Inteligente (Flash 3 Preview)</option>
-                                </select>
+                                    <option value="local" selected>Local · Qwen 2.5 1.5B (WebLLM)</option>
+</select>
                             </div>
                         </div>
 
@@ -46,7 +45,7 @@
 
                     <div id="loading-overlay" role="status" aria-live="polite" aria-label="Generando recomendaciones">
                         <div class="loading-card"><div class="spinner-border text-primary" aria-hidden="true"></div>
-                        <h4 id="progress-title">Generando recomendaciones…</h4><p id="progress-detail">Esperando la respuesta de Gemini.</p>
+                        <h4 id="progress-title">Generando recomendaciones…</h4><p id="progress-detail">Generando en este dispositivo.</p>
                         <p id="elapsed">Tiempo transcurrido: 0 s</p><button id="cancel-loading" type="button" class="btn btn-outline-secondary">Cancelar</button></div>
                     </div>
 
@@ -59,7 +58,7 @@
                     </div>
                 </div>
             </div>
-        <button id="erase" class="btn btn-outline-secondary mt-3" type="button">Borrar datos y cancelar</button><p class="small mt-3">Se retiran los datos al salir o tras 15 minutos sin actividad. El borrado no alcanza el portapapeles, Gmail ni los datos ya enviados al proveedor.</p></main>
+        <button id="erase" class="btn btn-outline-secondary mt-3" type="button">Borrar datos y cancelar</button><p class="small mt-3">Se retiran los datos al salir o tras 15 minutos sin actividad. El borrado no alcanza el portapapeles, Gmail ni las copias externas.</p></main>
 
         <footer class="mt-5 d-flex justify-content-center">
             <p class="text-muted text-primary my-auto">Desarrollado por </p> <a class="my-auto text-secondary nav-link" href="https://linkedin.com/in/anderfrago">Ander Frago</a>

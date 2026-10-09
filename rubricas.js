@@ -84,3 +84,5 @@ const RUBRICS = [
   }
 ];
 if (typeof module !== 'undefined' && module.exports) module.exports = RUBRICS;
+
+globalThis.LOCAL_RUBRICS = RUBRICS;
