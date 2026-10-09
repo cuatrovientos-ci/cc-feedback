@@ -1,16 +1,16 @@
 # Actualización de la rama webbrowser-llm
 
-Esta rama reemplaza la generación de Puter/Gemini por WebLLM en el navegador. Consulta el [README](../README.md) para el flujo actualizado, requisitos, conservación y comprobaciones de despliegue. No debe mezclarse `app.js` de esta rama con el editor de una versión anterior.
+Esta rama utiliza **Wllama (WebAssembly / llama.cpp)** con modelos cuantizados en formato GGUF (Qwen 2.5 1.5B) ejecutados de forma local por CPU/Wasm. Consulta el [README](../README.md) para el flujo actualizado, requisitos y comprobaciones de despliegue.
 
 ## Requisitos de aceptación
 
-- Verificar WebGPU y memoria en los equipos de uso, la descarga y la cancelación; probar datos ficticios y calidad de las recomendaciones en castellano.
-- Revisar el modelo Qwen y su licencia, WebLLM fijado en 0.2.85 y los proveedores de distribución. El runtime se carga por CDN; pesos y bibliotecas se descargan desde las ubicaciones del catálogo de esa versión. Pueden existir redirecciones a servidores de distribución.
-- Comprobar que no se envían notas ni prompts a servicios de inferencia remotos. Mantener el editor aislado y sin conexiones de datos. No añadir un fallback a Puter/Gemini.
-- Completar identidad del responsable, contacto/DPD, base jurídica, finalidad, conservación y canal de derechos en `privacidad.html`; obtener autorización institucional antes de usar datos reales.
-- Incluir dispositivos, descargas, correos, copias y originales en la política de conservación. La caché de pesos del modelo es distinta de los borradores académicos.
-- Revisar siempre el texto y destinatario antes de Gmail, que recibe el texto mediante URL y conserva mensajes bajo sus propias condiciones.
+- Probar la carga y ejecución de Wllama en los equipos de uso (funciona en ordenadores con 8 GB de RAM sin activar flags en el navegador).
+- Verificar que la primera descarga del modelo GGUF y runtime Wasm se realiza correctamente y queda en caché local (IndexedDB).
+- Comprobar que no se envían nombres, correos ni datos identificativos al motor Wllama, manteniendo el editor en un iframe aislado con sandbox.
+- Confirmar que la inferencia no realiza llamadas de red ni telemetría a servicios en la nube.
+- Completar identidad del responsable, contacto/DPD, base jurídica, plazos de conservación y canal de derechos en `privacidad.html`; obtener autorización institucional antes del uso con datos reales.
+- Revisar siempre el borrador y destinatario antes de abrir Gmail.
 
 ## Pruebas
 
-Las pruebas automatizadas del navegador simulan el módulo WebLLM, pero ejecutan el worker y el protocolo reales de la aplicación. No sustituyen una prueba completa del modelo real con GPU. La rama principal conserva su implementación independiente.
+Las pruebas automatizadas de `tests/browser.cjs` simulan el módulo Wllama para validar el aislamiento, manejo de errores, streaming, lotes y cancelación sin comprometer datos confidenciales.
