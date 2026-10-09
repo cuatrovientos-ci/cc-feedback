@@ -2,8 +2,7 @@
 const form=document.getElementById('main-form'),input=document.getElementById('data'),list=document.getElementById('results'),status=document.getElementById('status'),results=document.getElementById('results-container'),loading=document.getElementById('loading-overlay');
 let pendingInput='',elapsedTimer,started=0;
 let identities=new Map(),records=[],request=null,last=Date.now(),timeout;
-const parentOrigin=new URL(document.referrer||location.href).origin;
-function send(data){parent.postMessage(data,parentOrigin);}
+function send(data){parent.postMessage(data,'*');}
 function reset(message=''){
   last=Date.now();clearInterval(elapsedTimer);pendingInput='';form.setAttribute('aria-busy','false');clearTimeout(timeout);request=null;identities.clear();records=[];input.value='';list.querySelectorAll('textarea').forEach(t=>t.value='');list.replaceChildren();results.style.display='none';loading.style.display='none';form.style.display='block';status.textContent=message;send({type:'cancel'});
 }
@@ -38,7 +37,7 @@ form.addEventListener('submit',event=>{
   }catch{status.textContent='Máximo diez filas. Revisa cabeceras, columnas, correos y valores. Sin cabecera, escribe seis notas, con nombre opcional numéricas 0–10, con total opcional; no se ha enviado esta tabla.';}
 });
 window.addEventListener('message',event=>{
-  if(event.source!==parent||event.origin!==parentOrigin||!request||event.data?.request!==request)return;
+  if(event.source!==parent||!request||event.data?.request!==request)return;
   expire();if(!request)return;
   const message=event.data;
   if(message.type==='progress'){progress(message.stage);if(message.current&&message.total){document.getElementById('progress-detail').textContent+=` Fila ${message.current} de ${message.total}.`;if(message.stage==='waiting'){clearTimeout(timeout);timeout=setTimeout(()=>fail('timeout'),600000);}}return;}

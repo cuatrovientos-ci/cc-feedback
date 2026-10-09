@@ -394,8 +394,8 @@ if (unload) {
 frame.addEventListener('load', () => { if (busy) stop(); });
 window.addEventListener('pagehide', stop);
 
-window.addEventListener('message', async ({source, origin, data}) => {
-  if (source !== frame.contentWindow || origin !== 'null') return;
+window.addEventListener('message', async ({source, data}) => {
+  if (source !== frame.contentWindow) return;
   if (data?.type === 'cancel') {
     if (busy && abortGeneration) abortGeneration();
     busy = false;
