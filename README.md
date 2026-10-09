@@ -1,6 +1,39 @@
 # Retroalimentación de competencias clave
 
-Revisión local: 8 de octubre de 2026. Mantiene **Gemini mediante Puter, recomendaciones personalizadas y preparación del borrador en Gmail**. No se ha publicado esta revisión ni se ha acreditado autorización de uso real.
+Documentación actualizada: 9 de octubre de 2026. Mantiene **Gemini mediante Puter, recomendaciones personalizadas y preparación del borrador en Gmail**. La publicación del código no acredita autorización institucional de uso real.
+
+## Adecuación al RGPD
+
+Documentación revisada el 9 de octubre de 2026 a partir de los diagramas del informe inicial y del código actual. Describe las medidas implementadas; la configuración y autorización de producción deben comprobarse aparte.
+
+CC-feedback incorpora minimización de datos y aislamiento del editor: la petición a Puter/Gemini contiene códigos aleatorios, competencias y notas, sin nombres ni correos del alumnado. Si se introducen solo notas, los identificadores de ejemplo se crean localmente. Esto reduce la posibilidad de identificación por el proveedor, pero si el docente conserva el orden o la hoja original para asignar las recomendaciones, el centro sigue tratando datos personales. Una cuenta genérica no garantiza anonimato: el proveedor trata también datos de cuenta y conexión. La posibilidad de identificación debe valorarse según los medios razonablemente disponibles. El borrado local no elimina peticiones recibidas por proveedores ni mensajes de Gmail.
+
+Estos controles apoyan la adecuación al RGPD, pero no acreditan por sí solos el cumplimiento ni sustituyen la autorización del centro. Antes del uso con datos reales deben verificarse en el despliegue, completar la información de privacidad, revisar proveedores y condiciones de tratamiento y aprobar la conservación y el borrado, incluidas copias y exportaciones.
+
+El aviso se mantiene en `privacidad.html`; GitHub Pages no carga variables de un archivo `.env`.
+
+[Guía de privacidad](docs/PRIVACIDAD_Y_ACTUALIZACION.md) · [Web](https://cuatrovientos-ci.github.io/cc-feedback/).
+
+## Flujo de funcionamiento y datos
+
+```mermaid
+flowchart TD
+    P["GitHub Pages: aplicación estática"] --> E["Editor aislado en el navegador"]
+    N["Solo notas, o notas con nombre y correo opcionales"] --> E
+    E --> I["Identidades reales o de ejemplo: solo en el editor"]
+    E --> C["Códigos aleatorios, competencias y notas numéricas"]
+    C --> V["Contenedor valida campos permitidos"]
+    U["Cuenta y conexión con Puter"] --> AI["Puter y Gemini: recomendaciones"]
+    V --> AI
+    AI --> R["Validación completa de códigos y competencias"]
+    R --> E
+    I --> H["Asociación local y revisión docente del borrador"]
+    E --> H
+    H --> G["Acción expresa: abre Gmail con destinatario y texto en la URL"]
+    G --> M["Usuario revisa y envía desde Gmail"]
+    E --> X["Borrado local, cancelación, salida o inactividad; no borra datos del proveedor"]
+```
+
 
 ## Datos separados antes de llamar a la IA
 
@@ -11,14 +44,14 @@ Revisión local: 8 de octubre de 2026. Mantiene **Gemini mediante Puter, recomen
 5. Gemini devuelve recomendaciones. Se exige una correspondencia completa de códigos y competencias, sin duplicados. La asociación local utiliza el código, nunca el orden de respuesta. Nombres, correos, notas y total mostrados proceden de la entrada docente, no del modelo.
 6. El docente revisa y adapta el borrador. Al editarlo se desmarca la revisión. Gmail se abre por una acción expresa y con el destinatario local; no se envía ningún correo automáticamente.
 
-**Esto es seudonimización y minimización, no anonimización garantizada.** Los códigos se pueden vincular localmente a las identidades y el perfil de notas puede permitir inferencias. Puter recibe además información de conexión y de la cuenta que se autentica. Mantener esos perfiles para recomendaciones individualizadas no permite afirmar que el conjunto sea anónimo.
+La separación de identificadores reduce la exposición de datos. Consulta el apartado de adecuación al RGPD para distinguir la información recibida por la IA de la correspondencia conservada por el docente.
 
 ## Uso
 
 Servir los archivos por HTTPS (o localhost para pruebas), no abrirlos como `file://`.
 
 1. Pulsar «Conectar con Puter / Gemini». La primera pulsación muestra «Cargando servicio…» y después cambia el propio botón a «Acceder a Puter / Gemini». La segunda inicia sesión y muestra «Accediendo…» hasta terminar.
-2. Pegar celdas tabuladas con cabecera: cabecera opcional, nombre opcional, Email opcional, seis competencias y Total opcional. Sin cabecera se admite texto separado por espacios o celdas tabuladas. Si falta el nombre se usa Alumno1, Alumno2, etc.; si falta el correo se usa alumno1@example.invalid, alumno2@example.invalid, etc., marcado como ejemplo.
+2. Pegar celdas tabuladas o texto sin cabecera: cabecera opcional, nombre opcional, Email opcional, seis competencias y Total opcional. Sin cabecera se admite texto separado por espacios o celdas tabuladas. Si falta el nombre se usa Alumno1, Alumno2, etc.; si falta el correo se usa alumno1@example.invalid, alumno2@example.invalid, etc., marcado como ejemplo.
 3. Se admiten las nueve subcompetencias originales: Innovación, Emprendimiento, Trabajo en equipo, Comunicación oral, Comunicación escrita, Competencia digital, Adaptación al entorno, Autonomía y Responsabilidad. También las seis cabeceras `Competency 1 Level` a `Competency 6 Level`, mapeadas a las seis categorías generales del prompt original.
 4. Introducir notas 0–10 (hasta dos decimales, coma o punto), sin texto libre. Las competencias vacías no se envían. No se admiten texto libre, diagnósticos ni columnas desconocidas. Las notas no se convierten automáticamente a niveles, porque la escala original dejaba huecos.
 5. Generar, revisar cada recomendación y destinatario y abrir Gmail con una cuenta institucional autorizada. Las recomendaciones siguen siendo redactadas por la IA, no son plantillas locales.
@@ -36,7 +69,7 @@ El iframe permite el evento local del formulario con `allow-forms`, mientras `fo
 
 ## Publicación, autorización y pruebas
 
-Ver [guía de actualización](docs/PRIVACIDAD_Y_ACTUALIZACION.md) y [privacidad](privacidad.html). La web sigue en GitHub Pages, no en PythonAnywhere. La propuesta personal de Ander de migrar las otras aplicaciones a EU no la traslada automáticamente.
+Ver [guía de actualización](docs/PRIVACIDAD_Y_ACTUALIZACION.md) y [privacidad](privacidad.html). La web sigue en GitHub Pages, no en PythonAnywhere. La migración en curso de las cinco aplicaciones de PythonAnywhere a Europa no incluye CC-feedback ni el portal.
 
 `node --test tests/core.test.cjs`: trece pruebas de separación, validación y correspondencia.
 
