@@ -64,14 +64,14 @@ button.addEventListener('click', async () => {
     return;
   }
   await stop();
-  state('Iniciando runtime Wllama…', true);
+  state('Iniciando runtime Wllama (WASM)…', true);
   try {
     loadTimer = setTimeout(() => { error('timeout', 'Tiempo de espera agotado'); }, 600000);
 
-    const { Wllama } = await import('https://cdn.jsdelivr.net/npm/@wllama/wllama@2.2.1/esm/index.js');
-    const { default: WasmFromCDN } = await import('https://cdn.jsdelivr.net/npm/@wllama/wllama@2.2.1/esm/wasm-from-cdn.js');
+    const { Wllama, WasmCompatFromCDN } = await import('https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/esm/index.js');
 
-    wllama = new Wllama(WasmFromCDN);
+    // WasmCompatFromCDN garantiza compatibilidad total en GitHub Pages sin requerir cabeceras COOP/COEP
+    wllama = new Wllama(WasmCompatFromCDN);
     unload.disabled = false;
 
     const cfg = MODELS[selectedModel] || MODELS['qwen-0.5b'];
@@ -152,21 +152,18 @@ window.addEventListener('message', async ({source, origin, data}) => {
 
       const promptText = 'Sé conciso: introducción y cierre de una frase; valoración y recomendación de una o dos frases por competencia.\n' + Feedback.prompt([record], rubrics);
 
-      const raw = await wllama.createChatCompletion([
-        { role: 'user', content: promptText }
-      ], {
-        nPredict: 1536,
+      const response = await wllama.createChatCompletion({
+        messages: [{ role: 'user', content: promptText }],
+        n_predict: 1536,
         sampling: { temp: 0.3 },
-        onNewToken: (token, piece, currentText, { abortSignal }) => {
-          if (aborted || active !== request) {
-            abortSignal();
-            return;
-          }
+        onData: () => {
+          if (aborted || active !== request) return;
           send({type: 'progress', request, stage: 'receiving', current: i + 1, total: records.length});
         }
       });
 
       if (aborted || active !== request) throw new Error('aborted');
+      const raw = response?.choices?.[0]?.message?.content || '';
       result.push(...Feedback.response(raw, [record]));
     }
 

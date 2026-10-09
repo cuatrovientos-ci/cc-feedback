@@ -9,14 +9,15 @@ const server=http.createServer((req,res)=>{
  res.end(fs.readFileSync(path.join(root,name)));
 });
 const fakeWllama=String.raw`
+export const WasmCompatFromCDN = {};
 export class Wllama {
   constructor(config) {}
   async loadModelFromHF(repo, file, options) {
     if (window.__wllamaFailLoad) throw new Error('load failed');
     options?.progressCallback?.({ loaded: 50, total: 100 });
   }
-  async createChatCompletion(messages, options) {
-    const text = messages[0].content;
+  async createChatCompletion(options) {
+    const text = options.messages[0].content;
     if (text.includes('IDENTIDAD_SECRETA') || text.includes('secreto@example.es')) throw Error('identity leak');
     const records = JSON.parse(text.split('\nRegistros: ')[1]);
     if (records.length !== 1) throw Error('invalid batch');
@@ -24,17 +25,23 @@ export class Wllama {
     if (r.competencias[0].valor === 9) {
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
-    if (r.competencias[0].valor === 0) return '{}';
-    return JSON.stringify([{
-      id: r.id,
-      intro: 'Texto local de prueba',
-      competencias_evaluadas: r.competencias.map(c => ({
-        nombre_competencia: c.competencia,
-        rubrica: 'Valoración local',
-        recomendaciones: 'Consejo local de prueba'
-      })),
-      conclusion: 'Cierre local'
-    }]);
+    if (r.competencias[0].valor === 0) return { choices: [{ message: { content: '{}' } }] };
+    return {
+      choices: [{
+        message: {
+          content: JSON.stringify([{
+            id: r.id,
+            intro: 'Texto local de prueba',
+            competencias_evaluadas: r.competencias.map(c => ({
+              nombre_competencia: c.competencia,
+              rubrica: 'Valoración local',
+              recomendaciones: 'Consejo local de prueba'
+            })),
+            conclusion: 'Cierre local'
+          }])
+        }
+      }]
+    };
   }
   async exit() {}
 }
@@ -46,8 +53,7 @@ export class Wllama {
   browser=await chromium.launch({headless:true,...(process.env.CC_BROWSER?{executablePath:process.env.CC_BROWSER}:{})});
   const context=await browser.newContext();
   let downloads=0,gmail='';const external=[];
-  await context.route('https://cdn.jsdelivr.net/npm/@wllama/wllama@2.2.1/esm/index.js',route=>{downloads++;return route.fulfill({contentType:'text/javascript',body:fakeWllama});});
-  await context.route('https://cdn.jsdelivr.net/npm/@wllama/wllama@2.2.1/esm/wasm-from-cdn.js',route=>route.fulfill({contentType:'text/javascript',body:'export default {};'}));
+  await context.route('https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/esm/index.js',route=>{downloads++;return route.fulfill({contentType:'text/javascript',body:fakeWllama});});
   await context.route('https://mail.google.com/**',route=>{gmail=route.request().url();return route.abort();});
   context.on('request',r=>{if(r.url().startsWith('https://'))external.push(r.url());});
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -57,7 +63,7 @@ export class Wllama {
   await frame.getByText('[GENERACION_NOT_CONNECTED]',{exact:false}).waitFor();
   assert.equal(await frame.locator('#data').inputValue(),'1 2 3 4 5 6');
 
-  await page.locator('#connect').click();await page.getByRole('button',{name:'Modelo Wllama listo',exact:true}).waitFor();
+  await page.locator('#connect').click();await page.getByRole('button',{name:'Modelo listo:',exact:false}).waitFor();
   assert.equal(downloads,1);
   assert.equal(await page.evaluate(()=>{try{document.querySelector('iframe').contentWindow.document.body;return false;}catch{return true;}}),true);
 
@@ -81,7 +87,7 @@ export class Wllama {
   await frame.locator('#data').fill('9 2 3 4 5 6');await frame.locator('button[type=submit]').click();await frame.locator('#loading-overlay').waitFor();await frame.locator('#cancel-loading').click();
   await page.getByRole('button',{name:'Cargar modelo Wllama',exact:true}).waitFor();assert.equal(await frame.locator('#data').inputValue(),'');
 
-  await page.locator('#connect').click();await page.getByRole('button',{name:'Modelo Wllama listo',exact:true}).waitFor();
+  await page.locator('#connect').click();await page.getByRole('button',{name:'Modelo listo:',exact:false}).waitFor();
   await frame.locator('#data').fill('1 2 3 4 5 6');await frame.locator('button[type=submit]').click();await frame.locator('article').waitFor();
   await page.clock.fastForward(16*60*1000);assert.equal(await frame.locator('article').count(),0);
 
