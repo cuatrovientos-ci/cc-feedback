@@ -462,20 +462,36 @@ window.addEventListener('message', async ({source, origin, data}) => {
 
       send({type: 'progress', request, stage: 'waiting', current: i + 1, total: records.length});
 
-      const promptContent = buildCompactPrompt(record);
+      let raw = '';
+      if (engine && ready) {
+        try {
+          if (typeof engine.resetChat === 'function') {
+            await engine.resetChat();
+          }
 
-      const response = await engine.chat.completions.create({
-        messages: [
-          { role: 'system', content: 'Eres un tutor docente en España. Responde exclusivamente con un JSON válido y conciso.' },
-          { role: 'user', content: promptContent }
-        ],
-        max_tokens: 500,
-        temperature: 0.2
-      });
+          const promptContent = buildCompactPrompt(record);
+          const response = await engine.chat.completions.create({
+            messages: [
+              { role: 'system', content: 'Eres un tutor docente en España. Responde exclusivamente con un JSON válido y conciso.' },
+              { role: 'user', content: promptContent }
+            ],
+            max_tokens: 450,
+            temperature: 0.2
+          });
 
-      if (aborted || active !== request) throw new Error('aborted');
-      const raw = response?.choices?.[0]?.message?.content || '';
-      console.log('Salida de WebLLM para fila ' + (i + 1) + ':', raw);
+          if (aborted || active !== request) throw new Error('aborted');
+          raw = response?.choices?.[0]?.message?.content || '';
+          console.log('Salida de WebLLM para fila ' + (i + 1) + ':', raw);
+        } catch (engineErr) {
+          console.warn(`Aviso: Error en motor WebLLM en fila ${i + 1} (${engineErr?.message || engineErr}). Empleando banco pedagógico oficial.`);
+          const errText = String(engineErr?.message || engineErr).toLowerCase();
+          if (errText.includes('disposed') || errText.includes('lost') || errText.includes('device')) {
+            ready = false;
+            engine = null;
+            state('Cargar modelo WebLLM (WebGPU)');
+          }
+        }
+      }
 
       const normalized = adaptModelOutputToFeedback(raw, record);
       result.push(...Feedback.response(JSON.stringify(normalized), [record]));
