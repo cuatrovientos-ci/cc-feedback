@@ -63,6 +63,25 @@ function error(code, detail = '') {
   connection.textContent = detail ? `${msg} [Detalle: ${detail}]` : msg;
 }
 
+async function downloadModelToMemoryBlob(url, modelName) {
+  state(`Descargando en RAM ${modelName}…`, true);
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Error HTTP al descargar modelo: ${resp.status} ${resp.statusText}`);
+  const total = Number(resp.headers.get('content-length') || 0);
+  const reader = resp.body.getReader();
+  const chunks = [];
+  let loaded = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.length;
+    const pct = total ? Math.min(100, Math.max(0, Math.round((loaded / total) * 100))) : 0;
+    state(`Descargando en RAM ${modelName}: ${pct} %`, true);
+  }
+  return new Blob(chunks);
+}
+
 button.addEventListener('click', async () => {
   connection.hidden = true;
   if (!window.WebAssembly || !window.isSecureContext) {
@@ -91,14 +110,27 @@ button.addEventListener('click', async () => {
     const cfg = MODELS[selectedModel] || MODELS['qwen-0.5b'];
     state(`Conectando con ${cfg.name}…`, true);
 
-    // Carga directa del archivo GGUF por URL sin pasar por la API autenticada de Hugging Face
-    await wllama.loadModelFromUrl(cfg.url, {
-      n_ctx: 2048,
-      progressCallback: ({ loaded, total }) => {
-        const pct = total ? Math.min(100, Math.max(0, Math.round((loaded / total) * 100))) : 0;
-        state(`Descargando ${cfg.name}: ${pct} %`, true);
+    try {
+      // 1. Intento primario: usar caché en disco OPFS
+      await wllama.loadModelFromUrl(cfg.url, {
+        n_ctx: 2048,
+        progressCallback: ({ loaded, total }) => {
+          const pct = total ? Math.min(100, Math.max(0, Math.round((loaded / total) * 100))) : 0;
+          state(`Descargando ${cfg.name}: ${pct} %`, true);
+        }
+      });
+    } catch (cacheErr) {
+      const errText = String(cacheErr?.message || cacheErr);
+      // 2. Si falla por cuota de almacenamiento o espacio en disco (OPFS), descargar directo a memoria RAM como Blob
+      if (errText.includes('space') || errText.includes('write') || errText.includes('FileSystem') || errText.includes('Quota')) {
+        console.warn('Almacenamiento OPFS sin cuota suficiente. Fallback a descarga directa en memoria RAM:', errText);
+        const blob = await downloadModelToMemoryBlob(cfg.url, cfg.name);
+        state(`Cargando ${cfg.name} en el motor…`, true);
+        await wllama.loadModel([blob], { n_ctx: 2048 });
+      } else {
+        throw cacheErr;
       }
-    });
+    }
 
     clearTimeout(loadTimer);
     ready = true;
@@ -114,7 +146,7 @@ unload.addEventListener('click', async () => {
   await stop();
   if (request) send({type: 'failure', request, code: 'cancelled'});
   connection.hidden = false;
-  connection.textContent = 'Modelo Wllama descargado de memoria. Los archivos pueden permanecer en la caché del navegador.';
+  connection.textContent = 'Modelo Wllama descargado de memoria.';
 });
 
 frame.addEventListener('load', () => { if (busy) stop(); });

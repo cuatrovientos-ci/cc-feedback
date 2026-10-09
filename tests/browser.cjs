@@ -16,6 +16,9 @@ export class Wllama {
     if (window.__wllamaFailLoad) throw new Error('load failed');
     options?.progressCallback?.({ loaded: 50, total: 100 });
   }
+  async loadModel(blobs, options) {
+    if (window.__wllamaFailLoad) throw new Error('load failed');
+  }
   async loadModelFromHF(repo, file, options) {
     if (window.__wllamaFailLoad) throw new Error('load failed');
     options?.progressCallback?.({ loaded: 50, total: 100 });
