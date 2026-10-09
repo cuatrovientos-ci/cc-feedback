@@ -187,6 +187,62 @@ function extractJsonBlock(raw) {
   return text;
 }
 
+function isInvalidRecommendation(text) {
+  if (!text || typeof text !== 'string') return true;
+  const t = text.trim().toLowerCase();
+  if (t.length < 15) return true;
+  if (t.includes('tu consejo') || t.includes('consejo formativo') || t.includes('1-2 frases') || t.includes('1 frase') || t.includes('contextualización') || t.includes('motivadora') || t.includes('saludo') || t.includes('aquí') || t.includes('...')) {
+    return true;
+  }
+  return false;
+}
+
+function getPedagogicalAdvice(compName, score) {
+  const val = Number(score) || 0;
+  const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const c = norm(compName);
+
+  if (c.includes('innova') || c.includes('emprend')) {
+    if (val < 5) return 'Atrévete a proponer ideas en los proyectos y participa activamente en las sesiones de ideación sin temor a equivocarte.';
+    if (val < 7) return 'Buen trabajo siguiendo las pautas dadas; da un paso más proponiendo mejoras creativas y soluciones propias.';
+    return 'Excelente iniciativa y visión innovadora. Sigue liderando la búsqueda de soluciones creativas y compartiendo tus ideas con el grupo.';
+  }
+
+  if (c.includes('equipo')) {
+    if (val < 5) return 'Es fundamental mejorar la comunicación con tus compañeros, cumplir los plazos acordados en el grupo y escuchar las distintas opiniones.';
+    if (val < 7) return 'Colaboras bien en el equipo; procura asumir un rol más participativo en la organización y en la toma de decisiones compartidas.';
+    return 'Gran capacidad de trabajo cooperativo, facilitando el buen clima y apoyando al resto del equipo en los momentos clave.';
+  }
+
+  if (c.includes('comunica')) {
+    if (val < 5) return 'Cuida la estructuración de tus exposiciones y escritos, adaptando el registro al entorno profesional y prestando atención a la claridad.';
+    if (val < 7) return 'Te expresas con claridad; para seguir avanzando, practica una escucha activa más reflexiva y enriquece tu vocabulario técnico.';
+    return 'Comunicación muy eficaz y asertiva, adecuando perfectamente el lenguaje tanto en intervenciones orales como en entregas escritas.';
+  }
+
+  if (c.includes('digital')) {
+    if (val < 5) return 'Practica más con las herramientas digitales del curso y asegúrate de verificar la calidad y rigor de los resultados obtenidos.';
+    if (val < 7) return 'Utilizas las plataformas digitales con soltura; profundiza en el uso crítico y seguro de nuevas herramientas para optimizar tu trabajo.';
+    return 'Dominio óptimo y con sentido crítico de los entornos y herramientas digitales, aprovechándolas al máximo en tus entregas.';
+  }
+
+  if (c.includes('entorno') || c.includes('adaptaci')) {
+    if (val < 5) return 'Intenta afrontar los cambios imprevistos con flexibilidad y disposición de aprendizaje, buscando apoyo cuando surjan dudas.';
+    if (val < 7) return 'Te adaptas adecuadamente a situaciones nuevas; mantén una actitud abierta y proactiva ante los ajustes que requieran los proyectos.';
+    return 'Excelente flexibilidad y resiliencia ante cambios o retos imprevistos, respondiendo de forma constructiva y rápida.';
+  }
+
+  if (c.includes('autonom') || c.includes('responsa')) {
+    if (val < 5) return 'Organiza mejor tus tiempos de entrega y planifica tus tareas diarias de forma más independiente sin esperar recordatorios.';
+    if (val < 7) return 'Cumples con tus compromisos habitualmente; busca anticiparte a los problemas gestionando tus recursos con mayor autonomía.';
+    return 'Gran nivel de autonomía y responsabilidad, gestionando con madurez tus tiempos y asumiendo con rigor cada uno de tus compromisos.';
+  }
+
+  if (val < 5) return `Conviene repasar los puntos clave de ${compName}, consultar dudas de inmediato y apoyarse en las dinámicas de clase para afianzar el aprendizaje.`;
+  if (val < 7) return `Continúa trabajando con regularidad en ${compName} y busca momentos para tomar mayor iniciativa en las tareas prácticas.`;
+  return `Excelente nivel en ${compName}. Sigue manteniendo esta implicación y comparte tus buenas prácticas con el grupo.`;
+}
+
 function adaptModelOutputToFeedback(raw, record) {
   let parsed = null;
   const clean = extractJsonBlock(raw);
@@ -206,7 +262,6 @@ function adaptModelOutputToFeedback(raw, record) {
 
   const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
-  // Mapeo flexible de recomendaciones según el formato devuelto por el modelo
   const recMap = new Map();
   if (parsed.recomendaciones && typeof parsed.recomendaciones === 'object' && !Array.isArray(parsed.recomendaciones)) {
     for (const [k, v] of Object.entries(parsed.recomendaciones)) {
@@ -227,7 +282,6 @@ function adaptModelOutputToFeedback(raw, record) {
   const fixedCompetencias = record.competencias.map(recComp => {
     const expectedNorm = norm(recComp.competencia);
     
-    // Buscar recomendación en el mapa
     let recText = '';
     for (const [k, v] of recMap.entries()) {
       if (k === expectedNorm || k.includes(expectedNorm) || expectedNorm.includes(k)) {
@@ -236,19 +290,10 @@ function adaptModelOutputToFeedback(raw, record) {
       }
     }
 
-    // Si el modelo no dio consejo concreto, generar uno pedagógico coherente con la nota
-    if (!recText || recText.length < 5) {
-      const val = Number(recComp.valor) || 0;
-      if (val < 5) {
-        recText = `Conviene repasar los puntos clave de ${recComp.competencia}, consultar dudas de inmediato y apoyarse en las dinámicas de clase para afianzar el aprendizaje.`;
-      } else if (val < 7) {
-        recText = `Continúa trabajando con regularidad en ${recComp.competencia} y busca momentos para tomar mayor iniciativa en las tareas prácticas.`;
-      } else {
-        recText = `Excelente nivel en ${recComp.competencia}. Sigue manteniendo esta implicación y comparte tus buenas prácticas con el grupo.`;
-      }
+    if (isInvalidRecommendation(recText)) {
+      recText = getPedagogicalAdvice(recComp.competencia, recComp.valor);
     }
 
-    // Obtener la valoración oficial de la rúbrica según la calificación
     const rubricText = getRubricDescriptor(recComp.competencia, recComp.valor);
 
     return {
@@ -258,10 +303,15 @@ function adaptModelOutputToFeedback(raw, record) {
     };
   });
 
-  const intro = String(parsed.intro || parsed.introduccion || '').trim() ||
-    'A continuación se detalla la retroalimentación formativa de las competencias evaluadas en este periodo:';
-  const conclusion = String(parsed.conclusion || parsed.conclusiones || parsed.cierre || '').trim() ||
-    'Sigue mostrando constancia y dedicación para consolidar tu progreso en los próximos proyectos.';
+  let intro = String(parsed.intro || parsed.introduccion || '').trim();
+  if (isInvalidRecommendation(intro) || intro.length < 15) {
+    intro = 'A continuación se detalla la retroalimentación formativa de las competencias evaluadas en este periodo:';
+  }
+
+  let conclusion = String(parsed.conclusion || parsed.conclusiones || parsed.cierre || '').trim();
+  if (isInvalidRecommendation(conclusion) || conclusion.length < 15) {
+    conclusion = 'Sigue mostrando constancia y dedicación para consolidar tu progreso en los próximos proyectos.';
+  }
 
   return [{
     id: record.id,
@@ -273,17 +323,21 @@ function adaptModelOutputToFeedback(raw, record) {
 
 function buildCompactPrompt(record) {
   const compLines = record.competencias.map(c => `- ${c.competencia}: ${c.valor}/10`).join('\n');
-  return `Actúa como tutor docente de Formación Profesional en España.
-Redacta retroalimentación formativa personalizada, constructiva y respetuosa para un estudiante según sus calificaciones:
+  return `Eres docente en el Centro Integrado Cuatrovientos.
+Escribe una recomendación pedagógica real, útil y personalizada para este alumno según sus notas en competencias (escala 0 a 10):
 ${compLines}
 
-Responde ÚNICAMENTE con este objeto JSON sin explicaciones adicionales:
+Para notas bajas (< 5), da pautas claras de recuperación y trabajo en clase.
+Para notas medias (5 a 7), anima a participar más y asumir iniciativa.
+Para notas altas (> 7), felicita y sugiere liderar o consolidar.
+
+Responde ÚNICAMENTE en JSON válido con este formato:
 {
-  "intro": "Breve contextualización cordial de 1 frase.",
+  "intro": "saludo cordial y breve contexto",
   "recomendaciones": {
-${record.competencias.map(c => `    "${c.competencia}": "Consejo formativo breve y práctico para progresar o consolidar (1-2 frases)."`).join(',\n')}
+${record.competencias.map(c => `    "${c.competencia}": "tu consejo concreto para ${c.competencia}"`).join(',\n')}
   },
-  "conclusion": "Breve frase motivadora de cierre (1 frase)."
+  "conclusion": "cierre motivador para el alumno"
 }`;
 }
 
