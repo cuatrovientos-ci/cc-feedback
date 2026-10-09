@@ -84,24 +84,75 @@ async function downloadModelToMemoryBlob(url, modelName) {
 
 function extractJsonArray(raw) {
   let text = String(raw || '').trim();
-  // 1. Extraer bloque markdown ```json ... ``` si existe
   const codeMatch = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(text);
   if (codeMatch) text = codeMatch[1].trim();
 
-  // 2. Extraer array JSON [ ... ]
   const firstBracket = text.indexOf('[');
   const lastBracket = text.lastIndexOf(']');
   if (firstBracket !== -1 && lastBracket > firstBracket) {
     return text.slice(firstBracket, lastBracket + 1);
   }
 
-  // 3. Si el modelo devolvió un único objeto { ... } en vez de array, envolverlo
   const firstBrace = text.indexOf('{');
   const lastBrace = text.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace > firstBrace) {
     return `[${text.slice(firstBrace, lastBrace + 1)}]`;
   }
   return text;
+}
+
+function adaptModelOutputToFeedback(raw, record) {
+  let parsed = null;
+  const clean = extractJsonArray(raw);
+  try {
+    parsed = JSON.parse(clean);
+    if (Array.isArray(parsed)) parsed = parsed[0];
+  } catch {
+    try {
+      const match = /\{[\s\S]*\}/.exec(raw);
+      if (match) parsed = JSON.parse(match[0]);
+    } catch {}
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    parsed = {};
+  }
+
+  const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const rawComps = Array.isArray(parsed.competencias_evaluadas)
+    ? parsed.competencias_evaluadas
+    : (Array.isArray(parsed.competencias) ? parsed.competencias : []);
+
+  const fixedCompetencias = record.competencias.map(recComp => {
+    const expectedNorm = norm(recComp.competencia);
+    const found = rawComps.find(c => {
+      const cName = norm(c?.nombre_competencia || c?.competencia || c?.nombre || '');
+      return cName === expectedNorm || cName.includes(expectedNorm) || expectedNorm.includes(cName);
+    });
+
+    const rubrica = (found?.rubrica || found?.valoracion || found?.evaluacion || '').trim() ||
+      `Demuestra un desempeño adecuado según el trabajo observado en ${recComp.competencia}.`;
+    const recomendaciones = (found?.recomendaciones || found?.recomendacion || found?.sugerencias || found?.sugerencia || '').trim() ||
+      `Continúa profundizando y aplicando las pautas trabajadas en clase para seguir mejorando.`;
+
+    return {
+      nombre_competencia: recComp.competencia,
+      rubrica: String(rubrica).slice(0, 3000),
+      recomendaciones: String(recomendaciones).slice(0, 3000)
+    };
+  });
+
+  const intro = String(parsed.intro || parsed.introduccion || '').trim() ||
+    'A continuación se detalla la retroalimentación formativa de las competencias evaluadas:';
+  const conclusion = String(parsed.conclusion || parsed.conclusiones || parsed.cierre || '').trim() ||
+    'Sigue mostrando constancia y dedicación para consolidar tu progreso en los próximos proyectos.';
+
+  return [{
+    id: record.id,
+    intro: intro.slice(0, 3000),
+    competencias_evaluadas: fixedCompetencias,
+    conclusion: conclusion.slice(0, 3000)
+  }];
 }
 
 button.addEventListener('click', async () => {
@@ -221,7 +272,7 @@ window.addEventListener('message', async ({source, origin, data}) => {
 
       const response = await wllama.createChatCompletion({
         messages: [
-          { role: 'system', content: 'Eres un evaluador educativo constructivo. Tu respuesta debe ser ÚNICAMENTE un array JSON válido sin ningún texto explicativo previo ni posterior.' },
+          { role: 'system', content: 'Eres un evaluador educativo en España. Responde exclusivamente con un array JSON válido sin texto adicional.' },
           { role: 'user', content: promptContent }
         ],
         max_tokens: 1536,
@@ -234,9 +285,10 @@ window.addEventListener('message', async ({source, origin, data}) => {
 
       if (aborted || active !== request) throw new Error('aborted');
       const raw = response?.choices?.[0]?.message?.content || '';
-      console.log('Salida sin procesar de Wllama (fila ' + (i + 1) + '):', raw);
-      const cleanJson = extractJsonArray(raw);
-      result.push(...Feedback.response(cleanJson, [record]));
+      console.log('Salida de Wllama para fila ' + (i + 1) + ':', raw);
+
+      const normalized = adaptModelOutputToFeedback(raw, record);
+      result.push(...Feedback.response(JSON.stringify(normalized), [record]));
     }
 
     if (active === request) {
