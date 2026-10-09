@@ -68,10 +68,18 @@ button.addEventListener('click', async () => {
   try {
     loadTimer = setTimeout(() => { error('timeout', 'Tiempo de espera agotado'); }, 600000);
 
-    const { Wllama, WasmCompatFromCDN } = await import('https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/esm/index.js');
+    const { Wllama } = await import('https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/esm/index.js');
 
-    // WasmCompatFromCDN garantiza compatibilidad total en GitHub Pages sin requerir cabeceras COOP/COEP
-    wllama = new Wllama(WasmCompatFromCDN);
+    const pathConfig = {
+      default: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/src/wasm/wllama.wasm'
+    };
+
+    wllama = new Wllama(pathConfig);
+    wllama.setCompat({
+      worker: 'https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.8.1/wasm/wllama.js',
+      wasm: 'https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.8.1/wasm/wllama.wasm'
+    }, 'all');
+
     unload.disabled = false;
 
     const cfg = MODELS[selectedModel] || MODELS['qwen-0.5b'];
