@@ -5,6 +5,7 @@ const button = document.getElementById('connect');
 const label = document.getElementById('connect-label');
 const spinner = document.getElementById('connect-spinner');
 const unload = document.getElementById('unload');
+const cleanCache = document.getElementById('clean-cache');
 
 let engine = null, ready = false, busy = false, active = null, abortGeneration = null, loadTimer = null;
 
@@ -67,6 +68,50 @@ async function stop() {
   state('Cargar modelo WebLLM (WebGPU)');
 }
 
+async function clearStorageQuota() {
+  let cleared = false;
+  if (typeof caches !== 'undefined') {
+    try {
+      const keys = await caches.keys();
+      for (const k of keys) {
+        await caches.delete(k);
+        cleared = true;
+      }
+    } catch (e) {
+      console.warn('Error al limpiar Cache Storage:', e);
+    }
+  }
+
+  if (navigator.storage && navigator.storage.getDirectory) {
+    try {
+      const root = await navigator.storage.getDirectory();
+      for await (const [name] of root.entries()) {
+        try {
+          await root.removeEntry(name, { recursive: true });
+          cleared = true;
+        } catch {}
+      }
+    } catch (e) {
+      console.warn('Error al limpiar OPFS:', e);
+    }
+  }
+
+  if (typeof indexedDB !== 'undefined' && indexedDB.databases) {
+    try {
+      const dbs = await indexedDB.databases();
+      for (const db of dbs) {
+        if (db.name) {
+          try { indexedDB.deleteDatabase(db.name); cleared = true; } catch {}
+        }
+      }
+    } catch (e) {
+      console.warn('Error al limpiar IndexedDB:', e);
+    }
+  }
+
+  return cleared;
+}
+
 function error(code, detail = '') {
   const request = active;
   stop();
@@ -75,10 +120,18 @@ function error(code, detail = '') {
   const msg = ({
     unsupported: 'Tu navegador o dispositivo no soporta WebGPU. Asegúrate de usar Google Chrome o Microsoft Edge actualizados en Windows.',
     timeout: 'La carga o descarga del modelo ha superado diez minutos. Comprueba la conexión y vuelve a intentarlo.',
-    model: 'No se pudo cargar o ejecutar el modelo WebGPU en este equipo. Comprueba la conexión y la memoria de vídeo; cierra otras pestañas y reintenta.',
+    model: 'No se pudo cargar o ejecutar el modelo WebGPU en este equipo.',
     cancelled: 'Generación cancelada por el usuario.'
   })[code] || 'No se pudo completar la generación local con WebLLM. Vuelve a cargar el modelo.';
-  connection.textContent = detail ? `${msg} [Detalle: ${detail}]` : msg;
+
+  const detailLower = String(detail || '').toLowerCase();
+  if (detailLower.includes('quota') || detailLower.includes('space') || detailLower.includes('storage')) {
+    connection.className = 'alert alert-warning mt-2';
+    connection.textContent = `Cuota de almacenamiento del navegador agotada (Quota exceeded). Pulsa el botón "Liberar espacio / limpiar caché" de arriba para eliminar residuos anteriores, o selecciona el modelo SmolLM2 (180 MB). [Detalle: ${detail}]`;
+  } else {
+    connection.className = 'alert alert-danger mt-2';
+    connection.textContent = detail ? `${msg} [Detalle: ${detail}]` : msg;
+  }
 }
 
 function getRubricDescriptor(compName, score) {
@@ -254,14 +307,29 @@ button.addEventListener('click', async () => {
 
     const modelId = resolveModelId(selectedModel);
     const cfg = MODELS[modelId] || { name: modelId };
-    state(`Iniciando ${cfg.name}…`, true);
-
-    engine = await webllm.CreateMLCEngine(modelId, {
-      initProgressCallback: (report) => {
-        const text = report?.text || 'Cargando modelo en GPU…';
-        state(text, true);
+    try {
+      engine = await webllm.CreateMLCEngine(modelId, {
+        initProgressCallback: (report) => {
+          const text = report?.text || 'Cargando modelo en GPU…';
+          state(text, true);
+        }
+      });
+    } catch (createErr) {
+      const errStr = String(createErr?.message || createErr).toLowerCase();
+      if (errStr.includes('quota') || errStr.includes('space') || errStr.includes('storage')) {
+        console.warn('Detectada cuota excedida. Limpiando almacenamiento residual...');
+        state('Cuota excedida. Liberando caché antigua y reintentando…', true);
+        await clearStorageQuota();
+        engine = await webllm.CreateMLCEngine(modelId, {
+          initProgressCallback: (report) => {
+            const text = report?.text || 'Cargando modelo en GPU…';
+            state(text, true);
+          }
+        });
+      } else {
+        throw createErr;
       }
-    });
+    }
 
     clearTimeout(loadTimer);
     ready = true;
@@ -272,6 +340,20 @@ button.addEventListener('click', async () => {
     error('model', err?.message || String(err));
   }
 });
+
+if (cleanCache) {
+  cleanCache.addEventListener('click', async () => {
+    cleanCache.disabled = true;
+    state('Liberando espacio de almacenamiento…', true);
+    await clearStorageQuota();
+    await stop();
+    cleanCache.disabled = false;
+    connection.hidden = false;
+    connection.className = 'alert alert-info mt-2';
+    connection.textContent = 'Almacenamiento y caché liberados. Ahora puedes pulsar «Cargar modelo WebLLM (WebGPU)».';
+    state('Cargar modelo WebLLM (WebGPU)');
+  });
+}
 
 unload.addEventListener('click', async () => {
   const request = active;
