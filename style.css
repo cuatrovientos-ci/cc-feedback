@@ -1,6 +1,6 @@
 :root {
     --bs-primary: #0f4184;
-    --bs-font-sans-serif: Arial, sans-serif;
+    --bs-font-sans-serif: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 

@@ -1,3 +1,144 @@
-html,body{height:100%;margin:0;font-family:Arial,sans-serif}body{display:flex;flex-direction:column}header{padding:12px 20px;background:#eef3f9;display:flex;gap:16px;align-items:center}iframe{width:100%;flex:1;border:0;min-height:500px}@media(max-width:600px){header{flex-direction:column;align-items:start;font-size:14px}}
+:root {
+  --primary-color: #0f4184;
+  --primary-dark: #0a2d5c;
+  --primary-hover: #134e9e;
+}
 
-#connection{margin:0;color:#842029;background:#f8d7da;padding:10px;border-radius:5px}#connect{white-space:normal} [hidden]{display:none!important}
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  padding: 12px 24px;
+  background-color: var(--primary-color);
+  color: #ffffff;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(15, 65, 132, 0.3);
+  z-index: 10;
+}
+
+header .small {
+  margin: 0;
+  color: #e2ecf9;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  flex: 1;
+}
+
+header .small a {
+  color: #93c5fd;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+header .small a:hover {
+  color: #ffffff;
+}
+
+/* Botón principal Cargar modelo Wllama */
+#connect {
+  background-color: #ffffff;
+  color: var(--primary-color);
+  border: 1px solid #ffffff;
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 8px 18px;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease-in-out;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#connect:hover:not(:disabled) {
+  background-color: #f0f4f9;
+  color: var(--primary-dark);
+  border-color: #f0f4f9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+#connect .spinner-border {
+  color: var(--primary-color);
+  width: 1rem;
+  height: 1rem;
+}
+
+#connect:disabled {
+  background-color: rgba(255, 255, 255, 0.85);
+  color: var(--primary-color);
+  border-color: transparent;
+  opacity: 0.85;
+  cursor: not-allowed;
+}
+
+/* Botón secundario Descargar de memoria */
+#unload {
+  background-color: transparent;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+  font-size: 0.85rem;
+  padding: 8px 14px;
+  border-radius: 6px;
+  transition: all 0.2s ease-in-out;
+  white-space: nowrap;
+}
+
+#unload:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+#unload:disabled {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.45);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#connection {
+  margin: 0;
+  color: #842029;
+  background-color: #fff1f2;
+  border: 1px solid #fecdd3;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+iframe {
+  width: 100%;
+  flex: 1;
+  border: 0;
+  min-height: 500px;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 800px) {
+  header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 16px;
+    gap: 12px;
+  }
+  #connect, #unload {
+    width: 100%;
+    justify-content: center;
+  }
+}
