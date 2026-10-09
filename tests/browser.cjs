@@ -12,10 +12,15 @@ const fakeWllama=String.raw`
 export const WasmCompatFromCDN = {};
 export class Wllama {
   constructor(config) {}
+  async loadModelFromUrl(url, options) {
+    if (window.__wllamaFailLoad) throw new Error('load failed');
+    options?.progressCallback?.({ loaded: 50, total: 100 });
+  }
   async loadModelFromHF(repo, file, options) {
     if (window.__wllamaFailLoad) throw new Error('load failed');
     options?.progressCallback?.({ loaded: 50, total: 100 });
   }
+  setCompat() {}
   async createChatCompletion(options) {
     const text = options.messages[0].content;
     if (text.includes('IDENTIDAD_SECRETA') || text.includes('secreto@example.es')) throw Error('identity leak');

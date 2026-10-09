@@ -9,8 +9,14 @@ const unload = document.getElementById('unload');
 let wllama = null, ready = false, busy = false, active = null, abortGeneration = null, loadTimer = null;
 
 const MODELS = {
-  'qwen-0.5b': { repo: 'Qwen/Qwen2.5-0.5B-Instruct-GGUF', file: 'qwen2.5-0.5b-instruct-q4_k_m.gguf', name: 'Qwen 2.5 0.5B (398 MB)' },
-  'qwen-1.5b': { repo: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF', file: 'qwen2.5-1.5b-instruct-q4_k_m.gguf', name: 'Qwen 2.5 1.5B (1.1 GB)' }
+  'qwen-0.5b': {
+    url: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    name: 'Qwen 2.5 0.5B (398 MB)'
+  },
+  'qwen-1.5b': {
+    url: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
+    name: 'Qwen 2.5 1.5B (1.1 GB)'
+  }
 };
 
 let selectedModel = 'qwen-0.5b';
@@ -85,7 +91,8 @@ button.addEventListener('click', async () => {
     const cfg = MODELS[selectedModel] || MODELS['qwen-0.5b'];
     state(`Conectando con ${cfg.name}…`, true);
 
-    await wllama.loadModelFromHF(cfg.repo, cfg.file, {
+    // Carga directa del archivo GGUF por URL sin pasar por la API autenticada de Hugging Face
+    await wllama.loadModelFromUrl(cfg.url, {
       n_ctx: 2048,
       progressCallback: ({ loaded, total }) => {
         const pct = total ? Math.min(100, Math.max(0, Math.round((loaded / total) * 100))) : 0;
