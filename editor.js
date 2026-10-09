@@ -8,9 +8,10 @@ function reset(message=''){
   last=Date.now();clearInterval(elapsedTimer);pendingInput='';form.setAttribute('aria-busy','false');clearTimeout(timeout);request=null;identities.clear();records=[];input.value='';list.querySelectorAll('textarea').forEach(t=>t.value='');list.replaceChildren();results.style.display='none';loading.style.display='none';form.style.display='block';status.textContent=message;send({type:'cancel'});
 }
 const failures={not_connected:'Primero carga el modelo local Wllama con el botón superior.',busy:'Ya hay una generación en curso.',cancelled:'Generación detenida. Carga el modelo de nuevo para reintentar.',invalid_input:'Usa como máximo diez filas válidas por lote.',model:'No se pudo inicializar o ejecutar Wllama en este equipo.',provider:'El motor Wllama no pudo completar la generación.',invalid_response:'El modelo devolvió un formato incompleto. No se han preparado correos. Reintenta con menos filas.',timeout:'Se ha agotado el tiempo de respuesta. Puedes volver a intentarlo.'};
-function fail(code){
+function fail(code, detail=''){
   const retained=pendingInput;const safe=Object.hasOwn(failures,code)?code:'provider';
-  reset(failures[safe]+' [GENERACION_'+safe.toUpperCase()+']');input.value=retained;
+  const detailText = detail ? ` [Detalle: ${detail}]` : '';
+  reset(failures[safe]+' [GENERACION_'+safe.toUpperCase()+']' + detailText);input.value=retained;
   status.className='alert alert-danger';status.setAttribute('role','alert');status.tabIndex=-1;status.focus();status.scrollIntoView({block:'center'});
 }
 function progress(stage){
@@ -41,7 +42,7 @@ window.addEventListener('message',event=>{
   expire();if(!request)return;
   const message=event.data;
   if(message.type==='progress'){progress(message.stage);if(message.current&&message.total){document.getElementById('progress-detail').textContent+=` Fila ${message.current} de ${message.total}.`;if(message.stage==='waiting'){clearTimeout(timeout);timeout=setTimeout(()=>fail('timeout'),600000);}}return;}
-  if(message.type==='failure'){fail(message.code);return;}
+  if(message.type==='failure'){fail(message.code, message.detail);return;}
   if(message.type!=='result')return;
   try{
     const responses=Feedback.response(JSON.stringify(message.result),records);
@@ -67,5 +68,5 @@ window.addEventListener('message',event=>{
       details.append(label,area,review,gmail,node('p','Al abrir Gmail, el texto y el destinatario se incluyen en su URL y pasan a Google. Comprueba la cuenta institucional y revisa antes de enviar.','small mt-2'));card.append(details);list.append(card);
     }
     request=null;records=[];identities.clear();status.textContent='Recomendaciones preparadas. Revisa cada borrador antes de abrir Gmail.';
-  }catch{fail('invalid_response');}
+  }catch(err){console.error('Error procesando respuesta en editor.js:', err);fail('invalid_response', err?.message||String(err));}
 });

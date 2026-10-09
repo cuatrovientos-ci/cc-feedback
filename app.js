@@ -52,7 +52,7 @@ async function stop() {
 function error(code, detail = '') {
   const request = active;
   stop();
-  if (request) send({type: 'failure', request, code});
+  if (request) send({type: 'failure', request, code, detail});
   connection.hidden = false;
   const msg = ({
     unsupported: 'Este navegador o equipo no soporta WebAssembly. Usa un navegador moderno actualizado.',
@@ -185,7 +185,7 @@ button.addEventListener('click', async () => {
 
     try {
       await wllama.loadModelFromUrl(cfg.url, {
-        n_ctx: 2048,
+        n_ctx: 4096,
         progressCallback: ({ loaded, total }) => {
           const pct = total ? Math.min(100, Math.max(0, Math.round((loaded / total) * 100))) : 0;
           state(`Descargando ${cfg.name}: ${pct} %`, true);
@@ -197,7 +197,7 @@ button.addEventListener('click', async () => {
         console.warn('Almacenamiento OPFS sin cuota suficiente. Fallback a descarga directa en memoria RAM:', errText);
         const blob = await downloadModelToMemoryBlob(cfg.url, cfg.name);
         state(`Cargando ${cfg.name} en el motor…`, true);
-        await wllama.loadModel([blob], { n_ctx: 2048 });
+        await wllama.loadModel([blob], { n_ctx: 4096 });
       } else {
         throw cacheErr;
       }
@@ -276,11 +276,7 @@ window.addEventListener('message', async ({source, origin, data}) => {
           { role: 'user', content: promptContent }
         ],
         max_tokens: 1536,
-        temperature: 0.2,
-        onData: () => {
-          if (aborted || active !== request) return;
-          send({type: 'progress', request, stage: 'receiving', current: i + 1, total: records.length});
-        }
+        temperature: 0.2
       });
 
       if (aborted || active !== request) throw new Error('aborted');
@@ -295,9 +291,9 @@ window.addEventListener('message', async ({source, origin, data}) => {
       send({type: 'result', request, result: Feedback.response(JSON.stringify(result), records)});
     }
   } catch (err) {
-    console.error('Error detallado en generación Wllama:', err);
+    console.error('Error detallado en generación Wllama en app.js:', err);
     if (active === request) {
-      send({type: 'failure', request, code: 'invalid_response'});
+      send({type: 'failure', request, code: 'invalid_response', detail: err?.message || String(err)});
     }
   } finally {
     if (active === request) {
