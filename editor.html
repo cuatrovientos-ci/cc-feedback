@@ -15,17 +15,16 @@
     <div class="sidebar-accent"></div>
 
     <div class="main-content">
-        <header class="mb-5">
-            <img src="https://cuatrovientos.org/wp-content/uploads/2025/01/LOGO-CENTRO-INTEGRADO-CUATROVIENTOS-300x115-2.png" alt="Centro Integrado Cuatrovientos" height="48" style="max-height: 48px; width: auto;">
-        </header>
-
         <main class="container-fluid">
             <div class="row">
                 <div id="form-container" class="col-lg-8 mx-auto">
-                    <div class="d-flex align-items-center mb-4">
-                        <div class="bg-primary me-3" style="width: 8px; height: 50px;"></div>
-                        <h2 class="display-6 text-muted">RETROALIMENTACIÓN <span class="text-primary fw-bold">COMPETENCIAS CLAVE</span></h2>
-                    </div>
+                    <header class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+                        <div class="d-flex align-items-center">
+                            <div class="bg-primary me-3" style="width: 8px; height: 50px;"></div>
+                            <h2 class="display-6 text-muted mb-0">RETROALIMENTACIÓN <span class="text-primary fw-bold">COMPETENCIAS CLAVE</span></h2>
+                        </div>
+                        <img src="https://cuatrovientos.org/wp-content/uploads/2025/01/LOGO-CENTRO-INTEGRADO-CUATROVIENTOS-300x115-2.png" alt="Centro Integrado Cuatrovientos" height="48" style="max-height: 48px; width: auto;">
+                    </header>
 
                     <p class="alert alert-primary">Nombres y correos permanecen en esta zona aislada. El modelo procesa códigos, competencias y notas en este dispositivo mediante Wllama (WebAssembly), sin enviarlos a un servicio externo de IA. El procesamiento local no garantiza anonimato. Utiliza datos ficticios hasta la autorización del centro. <a href="privacidad.html" target="_blank" rel="noopener noreferrer">Privacidad</a>.</p><details class="mb-3"><summary>Formato de la tabla</summary><p>La cabecera es opcional. Sin cabecera, escribe el nombre (opcional) seguido de seis notas numéricas, separadas por espacios o tabulaciones, y Total si lo tienes. Puedes incluir correo después del nombre; si falta se usa alumno1@example.invalid, alumno2@example.invalid, etc. Son direcciones de ejemplo que debes sustituir antes de enviar.</p><p>Orden: 1. Innovación y Emprendimiento; 2. Trabajo en Equipo; 3. Capacidad Comunicativa; 4. Competencia Digital; 5. Adaptación al Entorno; 6. Autonomía y Responsabilidad; Total opcional. Se admiten decimales con coma o punto. El total no se calcula si falta. Si omites el nombre, se asigna Alumno1, Alumno2, etc., por orden de fila.</p><p>Para usar cabecera, copia las columnas desde la hoja de cálculo separadas por tabulaciones. No incluyas observaciones, diagnósticos ni otras columnas.</p></details><button id="example" class="btn btn-outline-secondary mb-3" type="button">Ejemplo ficticio</button><p id="status" role="status"></p><form id="main-form" autocomplete="off" class="card shadow-sm p-4">
                         <div class="row mb-3">
