@@ -277,8 +277,16 @@ async function modelBlob(signal) {
   }
   signal.throwIfAborted();
   const blob = new Blob(chunks);
-  try { if (cache) await cache.put(config.url, new Response(blob)); }
-  catch { connection.hidden = false; connection.textContent = 'Sin espacio para guardar el modelo: se usará solo en memoria.'; }
+  try {
+    if (cache) {
+      try { await cache.delete(config.url); } catch {}
+      await cache.put(config.url, new Response(blob));
+    }
+  } catch {
+    connection.hidden = false;
+    connection.className = 'alert alert-info mt-2';
+    connection.textContent = 'Aviso: La caché en disco está llena. El modelo se carga directamente en memoria RAM.';
+  }
   signal.throwIfAborted();
   return blob;
 }
@@ -308,7 +316,7 @@ button.addEventListener('click', async () => {
     const blob = await modelBlob(controller.signal);
     controller.signal.throwIfAborted();
     state('Preparando modelo en memoria…', true);
-    await engine.loadModel([blob], {n_ctx: 2048, n_gpu_layers: loadedMode === 'gpu' ? 99999 : 0});
+    await engine.loadModel([blob], {n_ctx: 1024, n_gpu_layers: loadedMode === 'gpu' ? 99999 : 0});
     controller.signal.throwIfAborted();
     aiLoaded = true;
     const threads = engine.getNumThreads?.();
