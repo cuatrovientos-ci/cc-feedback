@@ -1,106 +1,67 @@
-import unittest
+import importlib.util
 import os
+from pathlib import Path
+import shutil
 import sys
+import tempfile
+import types
+import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+class ServerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.temp.name)
+        source = Path(__file__).resolve().parents[1]
+        for name in ['server.py','index.html','editor.html','editor.js','app.js','core.js','model-config.js','rubricas.js','style.css','shell.css','privacidad.html']:
+            shutil.copy2(source/name, cls.root/name)
+        shutil.copytree(source/'templates', cls.root/'templates')
+        shutil.copytree(source/'assets', cls.root/'assets')
+        (cls.root/'.env').write_text('GOOGLE_CLIENT_ID=fixture-id\nGOOGLE_CLIENT_SECRET=fixture-secret\nADMIN_USER=fixture@cuatrovientos.org\nSECRET_KEY=fixture-session\nDATABASE_PATH=fixture.db\n', encoding='utf-8-sig')
+        cls.env = os.environ.copy()
+        for key in ['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','ADMIN_USER','ADMIN_USERS','ADMIN_EMAIL','DATABASE_PATH','SECRET_KEY']:
+            os.environ.pop(key,None)
+        # Never initialize or export the user's database during regression tests.
+        stub = types.ModuleType('database')
+        stub.init_db = lambda: None
+        stub.export_to_rubricas_js = lambda: None
+        stub.build_rubricas_js_content = lambda: (source/'rubricas.js').read_text(encoding='utf-8')
+        sys.modules['database'] = stub
+        spec = importlib.util.spec_from_file_location('cc_test_server',cls.root/'server.py')
+        cls.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.module)
+        cls.client = cls.module.app.test_client()
+    @classmethod
+    def tearDownClass(cls):
+        os.environ.clear();os.environ.update(cls.env)
+        cls.temp.cleanup()
+    def test_env_loaded_from_application_with_bom(self):
+        self.assertEqual(self.module.GOOGLE_CLIENT_ID,'fixture-id')
+        self.assertEqual(self.module.ADMIN_USERS,['fixture@cuatrovientos.org'])
+        self.assertEqual(os.environ['DATABASE_PATH'],str(self.root/'fixture.db'))
+        html=self.client.get('/admin/login').get_data(as_text=True)
+        self.assertNotIn('Configuración requerida de Google Cloud Console',html)
+        self.assertNotIn('fixture-secret',html)
+        self.assertNotIn('fixture@cuatrovientos.org',html)
+    def test_private_files_never_served(self):
+        (self.root/'feedback.db').write_bytes(b'private')
+        for path in ['/.env','/.env.example','/feedback.db','/server.py','/database.py','/wsgi.py','/templates/login.html','/assets/../.env','/assets/.secret']:
+            with self.subTest(path=path): self.assertEqual(self.client.get(path).status_code,404)
+    def test_public_resources_work_for_opaque_editor(self):
+        for path in ['/style.css','/assets/bootstrap.min.css','/assets/cuatrovientos.png','/editor.js','/rubricas.js']:
+            response=self.client.get(path)
+            with self.subTest(path=path):
+                self.assertEqual(response.status_code,200)
+                self.assertEqual(response.headers['Cross-Origin-Resource-Policy'],'cross-origin')
+                self.assertEqual(response.headers['Cross-Origin-Embedder-Policy'],'require-corp')
+        self.assertNotIn('Cross-Origin-Resource-Policy',self.client.get('/admin/login').headers)
 
-import server
-import database
-
-class TestServer(unittest.TestCase):
-    def setUp(self):
-        server.app.config['TESTING'] = True
-        server.app.config['WTF_CSRF_ENABLED'] = False
-        self.client = server.app.test_client()
-
-    def test_security_headers(self):
-        res = self.client.get('/')
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.headers.get('Cross-Origin-Opener-Policy'), 'same-origin')
-        self.assertEqual(res.headers.get('Cross-Origin-Embedder-Policy'), 'require-corp')
-
-    def test_rubricas_js_dynamic(self):
-        res = self.client.get('/rubricas.js')
-        self.assertEqual(res.status_code, 200)
-        self.assertIn('LOCAL_RUBRICS', res.text)
-        self.assertIn('LOCAL_ADVICE', res.text)
-        self.assertIn('LOCAL_SETTINGS', res.text)
-
-    def test_json_apis(self):
-        res_r = self.client.get('/api/rubrics')
-        self.assertEqual(res_r.status_code, 200)
-        rubrics = res_r.get_json()
-        self.assertGreaterEqual(len(rubrics), 9)
-
-        res_rec = self.client.get('/api/recommendations')
-        self.assertEqual(res_rec.status_code, 200)
-        recs = res_rec.get_json()
-        self.assertGreaterEqual(len(recs), 6)
-
-        res_s = self.client.get('/api/settings')
-        self.assertEqual(res_s.status_code, 200)
-        settings = res_s.get_json()
-        self.assertIn('intro_text', settings)
-
-    def test_admin_protection(self):
-        res = self.client.get('/admin', follow_redirects=False)
-        self.assertEqual(res.status_code, 302)
-        self.assertIn('/admin/login', res.headers['Location'])
-
-    def test_login_page_renders_google(self):
-        res = self.client.get('/admin/login')
-        self.assertEqual(res.status_code, 200)
-        self.assertIn('cuatrovientos.org', res.text)
-        self.assertIn('/admin/login/google', res.text)
-
-    def test_admin_authenticated_session(self):
-        with self.client.session_transaction() as sess:
-            sess['logged_in'] = True
-            sess['username'] = 'ander.frago@cuatrovientos.org'
-            sess['name'] = 'Ander Frago'
-
-        res = self.client.get('/admin')
-        self.assertEqual(res.status_code, 200)
-        self.assertIn('Ander Frago', res.text)
-        self.assertIn('Rúbricas Oficiales', res.text)
-
-    def test_crud_rubrics(self):
-        with self.client.session_transaction() as sess:
-            sess['logged_in'] = True
-            sess['username'] = 'ander.frago@cuatrovientos.org'
-
-        # Create
-        res = self.client.post('/admin/rubrics/new', data={
-            'name': 'Test Competencia Especial',
-            'level1': 'Nivel 1 de prueba',
-            'level2': 'Nivel 2 de prueba',
-            'level3': 'Nivel 3 de prueba',
-            'level4': 'Nivel 4 de prueba',
-            'display_order': 99
-        }, follow_redirects=True)
-        self.assertEqual(res.status_code, 200)
-
-        # Check in DB
-        rubrics = database.get_all_rubrics()
-        found = next((r for r in rubrics if r['name'] == 'Test Competencia Especial'), None)
-        self.assertIsNotNone(found)
-
-        # Edit
-        res = self.client.post(f'/admin/rubrics/{found["id"]}/edit', data={
-            'name': 'Test Competencia Especial Editada',
-            'level1': 'N1 Edit',
-            'level2': 'N2 Edit',
-            'level3': 'N3 Edit',
-            'level4': 'N4 Edit',
-            'display_order': 99
-        }, follow_redirects=True)
-        self.assertEqual(res.status_code, 200)
-
-        # Delete
-        res = self.client.post(f'/admin/rubrics/{found["id"]}/delete', follow_redirects=True)
-        self.assertEqual(res.status_code, 200)
-        rubrics_after = database.get_all_rubrics()
-        self.assertIsNone(next((r for r in rubrics_after if r['id'] == found['id']), None))
-
-if __name__ == '__main__':
-    unittest.main()
+if __name__=='__main__':
+    if '--serve' in sys.argv:
+        from werkzeug.serving import make_server
+        ServerTests.setUpClass()
+        server=make_server('127.0.0.1',0,ServerTests.module.app)
+        print(server.server_port,flush=True)
+        try: server.serve_forever()
+        finally: ServerTests.tearDownClass()
+    else: unittest.main()

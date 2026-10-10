@@ -67,3 +67,11 @@ Abre «Prueba de aceleración GPU» y pulsa «Comprobar GPU». La prueba solicit
 Selecciona GPU antes de cargar el modelo y pulsa «Probar fila ficticia». Utiliza la misma estructura de seis competencias y límite de respuesta que la generación habitual. La descarga y carga se excluyen del tiempo. El límite de 120 segundos cancela la inferencia; la interrupción puede tardar en ser atendida por el motor. Se distingue una respuesta completa de una que necesita reglas.
 
 La interfaz solo confirma transferencia de capas a GPU si el motor la comunica en su registro de inicialización; en caso contrario indica «aceleración efectiva no confirmada». Nunca interpreta los hilos de CPU como uso de GPU. No hay cambio automático a CPU tras un fallo: retira el modelo y selecciona CPU expresamente para comparar. No se guardan los resultados de la prueba. Validar en el navegador y equipo reales antes de recomendar este modo.
+
+## Recursos del editor y configuración WSGI
+
+El `.env` se carga explícitamente junto a `server.py`, aceptando UTF-8 con o sin BOM. Las variables ya definidas en el proceso tienen prioridad. Tras cambiarlo, pulsa **Reload** en Web de PythonAnywhere. `DATABASE_PATH` relativo se resuelve desde el directorio del proyecto. Configura una `SECRET_KEY` aleatoria y estable para conservar las sesiones entre procesos y recargas.
+
+El editor conserva su sandbox sin `allow-same-origin`. Los recursos públicos incluyen `Cross-Origin-Resource-Policy: cross-origin` para poder cargarse desde ese origen opaco bajo COEP. No se permite descargar `.env`, SQLite, código Python ni archivos privados mediante la ruta de recursos.
+
+Si PythonAnywhere tiene mapeos de Static files para `/assets/` u otros recursos, estos pueden omitir las cabeceras Flask: retíralos para que los recursos pasen por esta aplicación, o configura las mismas cabeceras en la capa que los sirve. Nunca mapees la raíz del repositorio como directorio público. Comprueba CSS, imagen y scripts del iframe después de recargar.

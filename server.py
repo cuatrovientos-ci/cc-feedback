@@ -7,13 +7,16 @@ import requests
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, Response, jsonify
 from dotenv import load_dotenv
 
-import database
-
-# Cargar variables de entorno desde .env
-load_dotenv()
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SECRET_KEY = os.environ.get('SECRET_KEY', 'cuatrovientos-feedback-secret-key-change-in-production')
+# Deterministic under WSGI, regardless of its working directory; tolerate a Windows BOM.
+load_dotenv(os.path.join(BASE_DIR, '.env'), encoding='utf-8-sig', override=False)
+# Relative database paths belong to the application, not the WSGI working directory.
+_db_path = os.environ.get('DATABASE_PATH', '').strip()
+if _db_path and not os.path.isabs(_db_path):
+    os.environ['DATABASE_PATH'] = os.path.join(BASE_DIR, _db_path)
+
+import database
+SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 
 # Configuración de Administrador y Google OAuth2
 ALLOWED_DOMAIN = os.environ.get('ALLOWED_DOMAIN', 'cuatrovientos.org').strip().lower()
@@ -37,6 +40,10 @@ def add_security_headers(response):
     # Cabeceras requeridas para multihilo en WebAssembly/Wllama en navegadores modernos
     response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
     response.headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
+    # The sandboxed editor has an opaque origin. Only public assets may opt in.
+    if request.endpoint in {'static_files', 'dynamic_rubricas_js'} and response.status_code < 400:
+        response.headers['Cross-Origin-Resource-Policy'] = 'cross-origin'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
     return response
 
 def get_redirect_uri():
@@ -68,10 +75,16 @@ def dynamic_rubricas_js():
 
 @app.route('/<path:filename>')
 def static_files(filename):
-    file_path = os.path.join(BASE_DIR, filename)
-    if os.path.isfile(file_path):
-        return send_from_directory(BASE_DIR, filename)
-    return "Archivo no encontrado", 404
+    public_files = {
+        'index.html', 'editor.html', 'privacidad.html', 'app.js', 'editor.js',
+        'core.js', 'model-config.js', 'style.css', 'shell.css',
+    }
+    parts = filename.replace('\\', '/').split('/')
+    is_asset = (parts[0] == 'assets' and all(part and not part.startswith('.') for part in parts)
+                and os.path.splitext(filename)[1].lower() in {'.css', '.js', '.wasm', '.png', '.svg', '.jpg', '.jpeg', '.webp', '.woff', '.woff2'})
+    if filename not in public_files and not is_asset:
+        return "Archivo no encontrado", 404
+    return send_from_directory(BASE_DIR, filename)
 
 # --- API JSON ---
 

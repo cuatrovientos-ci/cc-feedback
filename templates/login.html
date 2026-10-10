@@ -34,7 +34,7 @@
                         <li>Solo se admiten cuentas verificadas que terminen en <code>@{{ allowed_domain }}</code>.</li>
                         {% if admin_users and '*' not in admin_users %}
                         <li>Solo las cuentas autorizadas en el archivo <code>.env</code> (<code>ADMIN_USER</code>) tienen permisos de acceso:
-                            <span class="fw-bold">{{ admin_users|join(', ') }}</span>
+                            <span class="fw-bold">Configuradas por el centro</span>
                         </li>
                         {% else %}
                         <li>Cualquier docente con cuenta corporativa activa puede administrar.</li>
@@ -49,7 +49,7 @@
                     <div class="input-group input-group-sm mb-2">
                         <input type="text" class="form-control font-monospace" value="{{ redirect_uri }}" readonly>
                     </div>
-                    <p class="small text-muted mb-0">Copia el <strong>ID de cliente</strong> y el <strong>Secreto de cliente</strong> a tu archivo <code>.env</code>:</p>
+                    <p class="small text-muted mb-0">Guarda el archivo <code>.env</code> junto a <code>server.py</code> y recarga la aplicación desde la pestaña Web de PythonAnywhere. Las variables del proceso tienen prioridad sobre el archivo. Copia el <strong>ID de cliente</strong> y el <strong>Secreto de cliente</strong> a tu archivo <code>.env</code>:</p>
                     <pre class="bg-dark text-white p-2 rounded small mt-1 mb-0"><code>GOOGLE_CLIENT_ID=tu_id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=tu_secreto</code></pre>
                 </div>

@@ -129,6 +129,8 @@ DEFAULT_SETTINGS = {
 
 def get_db(db_path=None):
     path = db_path or os.environ.get('DATABASE_PATH') or DEFAULT_DB_PATH
+    if not os.path.isabs(path):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     return conn
