@@ -11,6 +11,33 @@ let wllama = null, aiLoaded = false, busy = false, active = null;
 let loadingModel = false, stopping = null, loadController = null, generationController = null;
 let loadTask = null, generationTask = null, loadTimer = null, lastRowSeconds = null;
 const config = globalThis.CC_MODEL;
+const computeMode = document.getElementById('compute-mode');
+const checkGPU = document.getElementById('check-gpu');
+const benchmark = document.getElementById('benchmark');
+const gpuStatus = document.getElementById('gpu-status');
+const benchmarkStatus = document.getElementById('benchmark-status');
+let loadedMode = 'cpu', offloadedLayers = 0, checkingGPU = false;
+function readyLabel() { return loadedMode === 'gpu' ? 'IA Wllama cargada · GPU solicitada' : 'IA Wllama cargada en CPU'; }
+function backendLabel() {
+  return loadedMode === 'cpu' ? 'CPU (GPU desactivada)' : offloadedLayers > 0 ? `GPU confirmada por el motor: ${offloadedLayers} capas transferidas` : 'GPU solicitada; aceleración efectiva no confirmada por el motor';
+}
+async function probeGPU() {
+  if (!isSecureContext || !navigator.gpu) throw new Error('WebGPU no está disponible en este navegador o contexto.');
+  const adapter = await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
+  if (!adapter || adapter.isFallbackAdapter || adapter.info?.isFallbackAdapter) throw new Error('No se ha obtenido una GPU física compatible.');
+  const device = await adapter.requestDevice();
+  device.destroy();
+  return adapter.info?.description || adapter.info?.device || adapter.info?.vendor || 'Adaptador disponible';
+}
+checkGPU.addEventListener('click', async () => {
+  if (checkingGPU || busy || loadingModel || stopping) return;
+  checkingGPU = true; checkGPU.disabled = true;
+  gpuStatus.textContent = 'Comprobando acceso a WebGPU…';
+  try { gpuStatus.textContent = `WebGPU disponible: ${await probeGPU()}. Falta comprobar que el modelo se acelera y medir su tiempo.`; }
+  catch (err) { gpuStatus.textContent = `${err.message} Si está restringido, consulta con informática; no se cambian políticas del navegador.`; }
+  finally { checkingGPU = false; checkGPU.disabled = busy || loadingModel || Boolean(stopping); }
+});
+computeMode.addEventListener('change', () => { lastRowSeconds = null; });
 
 function state(text, working = false) {
   label.textContent = text;
@@ -19,6 +46,9 @@ function state(text, working = false) {
   button.setAttribute('aria-busy', String(working));
   unload.disabled = !(wllama || loadingModel || busy);
   cleanCache.disabled = loadingModel || busy || Boolean(stopping);
+  computeMode.disabled = loadingModel || busy || aiLoaded || Boolean(stopping);
+  benchmark.disabled = !aiLoaded || loadingModel || busy || Boolean(stopping);
+  checkGPU.disabled = checkingGPU || loadingModel || busy || Boolean(stopping);
 }
 function send(message) { frame.contentWindow.postMessage(message, '*'); }
 
@@ -234,31 +264,42 @@ button.addEventListener('click', async () => {
   loadTask = (async () => {
     const {Wllama} = await import(config.runtime);
     controller.signal.throwIfAborted();
-    const engine = new Wllama({default: config.wasm}); wllama = engine;
+    loadedMode = computeMode.value; offloadedLayers = 0; lastRowSeconds = null;
+    if (loadedMode === 'gpu') {
+      gpuStatus.textContent = `WebGPU: ${await probeGPU()}. Preparando prueba con el modelo…`;
+      controller.signal.throwIfAborted();
+    }
+    const captureLog = (...args) => {
+      // Only inspect backend initialization messages; never persist prompts or outputs.
+      const line = args.filter(v => typeof v === 'string').join(' ');
+      const match = /offloaded\s+(\d+)\s*\/\s*\d+\s+layers/i.exec(line);
+      if (match) offloadedLayers = Number(match[1]);
+    };
+    const engine = new Wllama({default: config.wasm}, {logger:{debug:captureLog,log:captureLog,info:captureLog,warn:captureLog,error:captureLog}}); wllama = engine;
     engine.setCompat({worker: config.compatWorker, wasm: config.compatWasm}, 'all');
     const blob = await modelBlob(controller.signal);
     controller.signal.throwIfAborted();
     state('Preparando modelo en memoria…', true);
-    await engine.loadModel([blob], {n_ctx: 2048, n_gpu_layers: 0});
+    await engine.loadModel([blob], {n_ctx: 2048, n_gpu_layers: loadedMode === 'gpu' ? 99999 : 0});
     controller.signal.throwIfAborted();
     aiLoaded = true;
     const threads = engine.getNumThreads?.();
     connection.hidden = false;
     connection.className = 'alert alert-success mt-2';
-    connection.textContent = `Modelo Qwen 0.5B listo. ${threads ? `${threads} hilo(s) de ejecución.` : 'Número de hilos no disponible.'} Prueba una fila para medir el tiempo en este equipo.`;
+    connection.textContent = `Modelo Qwen 0.5B listo. ${backendLabel()}. ${threads ? `${threads} hilo(s) de ejecución.` : 'Número de hilos no disponible.'} Prueba una fila para medir el tiempo en este equipo.`;
   })();
   try { await loadTask; }
   catch {
     if (!stopping) {
       connection.hidden = false; connection.className = 'alert alert-warning mt-2';
-      connection.textContent = controller.signal.aborted ? 'Carga interrumpida o tiempo agotado.' : 'No se pudo cargar el modelo. Puedes usar las propuestas por reglas.';
+      connection.textContent = controller.signal.aborted ? 'Carga interrumpida o tiempo agotado.' : 'No se pudo cargar el modelo en el modo elegido. Puedes seleccionar CPU y reintentar; no se cambia a CPU automáticamente.';
       const engine = wllama; wllama = null;
       if (engine) { try { await engine.exit(); } catch {} }
       aiLoaded = false;
     }
   } finally {
     clearTimeout(loadTimer); loadingModel = false; loadTask = null;
-    if (!stopping) state(aiLoaded ? 'IA Wllama cargada en CPU' : 'Cargar IA Wllama (CPU · Opcional)');
+    if (!stopping) state(aiLoaded ? readyLabel() : 'Cargar IA Wllama (CPU · Opcional)');
   }
 });
 
@@ -291,7 +332,7 @@ window.addEventListener('message', async ({source, data}) => {
   if (busy || stopping || loadingModel) { send({type:'failure', request, code:'busy'}); return; }
   busy = true; active = request;
   const controller = new AbortController(); generationController = controller;
-  state(aiLoaded ? 'IA Wllama cargada en CPU' : 'Generando propuestas…');
+  state(aiLoaded ? readyLabel() : 'Generando propuestas…');
   generationTask = (async () => {
     const records = Feedback.validateRecords(data.records);
     if (records.length > 40) throw new Error('Lote demasiado grande');
@@ -332,8 +373,38 @@ window.addEventListener('message', async ({source, data}) => {
     generationTask = null;
     if (!stopping) {
       busy = false; active = null; generationController = null;
-      state(aiLoaded ? 'IA Wllama cargada en CPU' : 'Cargar IA Wllama (CPU · Opcional)');
+      state(aiLoaded ? readyLabel() : 'Cargar IA Wllama (CPU · Opcional)');
     }
   }
 });
 state('Cargar IA Wllama (CPU · Opcional)');
+
+benchmark.addEventListener('click', async () => {
+  if (!aiLoaded || busy || loadingModel || stopping) return;
+  busy = true;
+  const controller = new AbortController(); generationController = controller;
+  const started = performance.now();
+  const timer = setTimeout(() => controller.abort(), 120000);
+  const ticker = setInterval(() => { benchmarkStatus.textContent = `Prueba en curso: ${Math.round((performance.now()-started)/1000)} s. ${backendLabel()}. Puedes detenerla con «Retirar modelo».`; }, 1000);
+  state('Probando fila ficticia…', true);
+  generationTask = (async () => {
+    const record = Feedback.prepare(Feedback.parseStudents('5 6 4 7 5 6')).records[0];
+    const response = await wllama.createChatCompletion({
+      abortSignal:controller.signal, cache_prompt:false,
+      messages:[{role:'system',content:'Propón actividades formativas, sin inventar observaciones sobre el alumno. Responde en JSON.'},{role:'user',content:buildCompactPrompt(record)}],
+      max_tokens:Math.min(1000,160+record.competencias.length*90), temperature:0.2, response_format:{type:'json_object'}
+    });
+    controller.signal.throwIfAborted();
+    const info = {};
+    adaptModelOutputToFeedback(response?.choices?.[0]?.message?.content || '',record,info);
+    const elapsed = ((performance.now()-started)/1000).toFixed(1);
+    const method = info.method === 'ai' ? 'Respuesta completa de IA' : 'Respuesta incompleta: requiere sustitución por reglas';
+    benchmarkStatus.textContent = `${elapsed} s por fila ficticia. ${backendLabel()}. ${method}. Tiempo de generación, sin descarga ni carga del modelo. Para comparar, retira el modelo y elige el otro modo.`;
+  })();
+  try { await generationTask; }
+  catch { benchmarkStatus.textContent = controller.signal.aborted ? 'Prueba interrumpida o límite de 120 s alcanzado. No es una medición completada.' : 'La prueba falló. No se ha sustituido la IA por reglas ni cambiado automáticamente a CPU.'; }
+  finally {
+    clearTimeout(timer); clearInterval(ticker); generationTask = null;
+    if (!stopping) { busy = false; generationController = null; state(aiLoaded ? readyLabel() : 'Cargar IA Wllama (CPU · Opcional)'); }
+  }
+});

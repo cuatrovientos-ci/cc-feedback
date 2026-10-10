@@ -22,11 +22,12 @@ const fakeWllama=String.raw`
 
 export class Wllama {
 
+  constructor(config, options) { this.logger=options?.logger; }
   setCompat() {}
 
   getNumThreads() { return 1; }
 
-  async loadModel() { if(window.__wllamaFailLoad) throw Error('load failed'); }
+  async loadModel(blobs, options) { window.__gpuLayers=options.n_gpu_layers;if(options.n_gpu_layers>0)this.logger?.info('offloaded 25/25 layers to GPU');if(window.__wllamaFailLoad) throw Error('load failed'); }
 
   async createChatCompletion(options) {
 
@@ -206,6 +207,25 @@ export class Wllama {
 
   });assert.equal(runtime,true);
 
+  // GPU probe, explicit offload and identical benchmark without real hardware.
+  await context.route('**/assets/vendor/wllama-3.8.1/esm/index.js',route=>route.fulfill({contentType:'text/javascript',body:fakeWllama}));
+  await context.unroute('https://huggingface.co/**');
+  await context.route('https://huggingface.co/**',route=>route.fulfill({contentType:'application/octet-stream',body:'fake GGUF'}));
+  await page.reload();
+  await page.locator('summary').click();
+  await page.evaluate(()=>Object.defineProperty(navigator,'gpu',{configurable:true,value:{requestAdapter:async()=>null}}));
+  await page.locator('#check-gpu').click();await page.getByText('No se ha obtenido una GPU física compatible.',{exact:false}).waitFor();
+  await page.evaluate(()=>Object.defineProperty(navigator,'gpu',{configurable:true,value:{requestAdapter:async()=>({info:{description:'GPU de prueba'},requestDevice:async()=>({destroy(){}})})}}));
+  await page.locator('#check-gpu').click();await page.getByText('WebGPU disponible: GPU de prueba',{exact:false}).waitFor();
+  await page.locator('#compute-mode').selectOption('gpu');
+  await page.locator('#connect').click();await page.getByRole('button',{name:'IA Wllama cargada · GPU solicitada',exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.__gpuLayers),99999);
+  assert.equal(await page.locator('#compute-mode').isDisabled(),true);
+  await page.locator('#benchmark').click();await page.locator('#benchmark-status').filter({hasText:'s por fila ficticia'}).waitFor();
+  assert.match(await page.locator('#benchmark-status').innerText(),/GPU confirmada por el motor: 25 capas/);
+  assert.match(await page.locator('#benchmark-status').innerText(),/Respuesta completa de IA/);
+  assert.equal(await frame.locator('article').count(),0);
+  await page.locator('#unload').click();await page.locator('#compute-mode').selectOption('cpu');
   assert.deepEqual(errors,[]);
 
   console.log('PASS: rules, AI, fallback labels, isolation, review/Gmail, abort and reload, batches, inactivity, scoped cache and mobile. Wllama simulated.');

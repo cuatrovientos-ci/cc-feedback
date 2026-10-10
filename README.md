@@ -59,3 +59,11 @@ El runtime oficial se incluye con versión fija; su paquete se verificó contra 
 `node --test tests/core.test.cjs` verifica entradas y correspondencia de resultados. `node tests/browser.cjs` requiere Playwright y un navegador; `CC_BROWSER` permite indicar su ruta. El navegador utiliza un Wllama simulado: comprueba reglas, IA, etiquetas de sustitución, aislamiento, revisión, cancelación, borrado selectivo y caducidad, pero no acredita calidad ni rendimiento del modelo real.
 
 Antes de publicar, prueba con datos ficticios en equipos del centro: descarga, una fila y lote, cancelación durante descarga/generación, revisión del contenido y ausencia de envío de notas en la pestaña de red. Comprueba también los registros y condiciones de PythonAnywhere.
+
+## Prueba experimental de GPU
+
+Abre «Prueba de aceleración GPU» y pulsa «Comprobar GPU». La prueba solicita un adaptador y un dispositivo WebGPU; no modifica políticas ni requiere abrir chrome://gpu. Una respuesta positiva no garantiza que el modelo sea compatible o más rápido.
+
+Selecciona GPU antes de cargar el modelo y pulsa «Probar fila ficticia». Utiliza la misma estructura de seis competencias y límite de respuesta que la generación habitual. La descarga y carga se excluyen del tiempo. El límite de 120 segundos cancela la inferencia; la interrupción puede tardar en ser atendida por el motor. Se distingue una respuesta completa de una que necesita reglas.
+
+La interfaz solo confirma transferencia de capas a GPU si el motor la comunica en su registro de inicialización; en caso contrario indica «aceleración efectiva no confirmada». Nunca interpreta los hilos de CPU como uso de GPU. No hay cambio automático a CPU tras un fallo: retira el modelo y selecciona CPU expresamente para comparar. No se guardan los resultados de la prueba. Validar en el navegador y equipo reales antes de recomendar este modo.
