@@ -327,7 +327,9 @@ button.addEventListener('click', async () => {
       if (match) offloadedLayers = Number(match[1]);
     };
     const engine = new Wllama({default: config.wasm}, {logger:{debug:captureLog,log:captureLog,info:captureLog,warn:captureLog,error:captureLog}}); wllama = engine;
-    engine.setCompat({worker: config.compatWorker, wasm: config.compatWasm}, 'all');
+    if (!globalThis.crossOriginIsolated) {
+      engine.setCompat({worker: config.compatWorker, wasm: config.compatWasm}, 'all');
+    }
     const blob = await modelBlob(controller.signal);
     controller.signal.throwIfAborted();
     state('Preparando modelo en memoria…', true);
