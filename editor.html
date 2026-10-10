@@ -27,20 +27,11 @@
                     </header>
 
                     <p class="alert alert-primary">Nombres y correos permanecen en esta zona aislada. Las notas se procesan localmente en este dispositivo mediante el sistema de propuestas por reglas y apoyo de IA local, sin enviarlas a servidores externos. El procesamiento local no garantiza anonimato. Utiliza datos ficticios hasta la autorización del centro. <a href="privacidad.html" target="_blank" rel="noopener noreferrer">Privacidad</a>.</p><details class="mb-3"><summary>Formato de la tabla</summary><p>La cabecera es opcional. Sin cabecera, escribe el nombre (opcional) seguido de seis notas numéricas, separadas por espacios o tabulaciones, y Total si lo tienes. Puedes incluir correo después del nombre; si falta se usa alumno1@example.invalid, alumno2@example.invalid, etc. Son direcciones de ejemplo que debes sustituir antes de enviar.</p><p>Orden: 1. Innovación y Emprendimiento; 2. Trabajo en Equipo; 3. Capacidad Comunicativa; 4. Competencia Digital; 5. Adaptación al Entorno; 6. Autonomía y Responsabilidad; Total opcional. Se admiten decimales con coma o punto. El total no se calcula si falta. Si omites el nombre, se asigna Alumno1, Alumno2, etc., por orden de fila.</p><p>Para usar cabecera, copia las columnas desde la hoja de cálculo separadas por tabulaciones. No incluyas observaciones, diagnósticos ni otras columnas.</p></details><button id="example" class="btn btn-outline-secondary mb-3" type="button">Ejemplo ficticio</button><p id="status" role="status"></p><form id="main-form" autocomplete="off" class="card shadow-sm p-4">
-                        <div class="row mb-3">
-                            <div class="col-md-7">
-                                <label class="small text-muted">Motor de generación:</label>
-                                <select id="form-select" class="form-select">
-                                    <option value="qwen-cpu" selected>IA Qwen 2.5 local (Wllama · Recomendado si está cargada)</option>
-                                    <option value="local-pedagogico">Propuestas por reglas (sin IA · Instantáneo)</option>
-                                </select>
-                            </div>
-                        </div>
-
+                        <p class="small text-muted mb-2">Generación inicial instantánea con las rúbricas oficiales y motor pedagógico de Cuatrovientos. Luego podrás mejorar individualmente con IA los alumnos que elijas.</p>
                         <textarea id="data" aria-label="Filas del Excel" maxlength="100000" autocomplete="off" spellcheck="false" class="form-control mb-4" rows="10" 
                             placeholder="Pega las filas con o sin cabecera. Ejemplo: Alumno1 5 5 6 4 6 7"></textarea>
                         
-                        <button class="btn btn-primary btn-lg w-100" type="submit">Generar Informes</button>
+                        <button class="btn btn-primary btn-lg w-100" type="submit">Generar Borradores con Rúbricas (Instantáneo)</button>
                     </form>
 
                     <div id="loading-overlay" role="status" aria-live="polite" aria-label="Generando recomendaciones">
@@ -53,6 +44,20 @@
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h4>Listado de Alumnos</h4>
                             <button id="clear" type="button" class="btn btn-sm btn-outline-secondary">Nueva Consulta</button>
+                        </div>
+                        <div class="card bg-light p-3 mb-3 border-primary shadow-sm" id="ai-batch-bar">
+                            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                                <div>
+                                    <strong class="d-block">Mejora individualizada con IA:</strong>
+                                    <span class="text-muted small">Selecciona con las casillas los alumnos que quieras enriquecer con IA y pulsa el botón.</span>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <button id="select-all-ai" type="button" class="btn btn-sm btn-outline-secondary">Marcar todos</button>
+                                    <button id="deselect-all-ai" type="button" class="btn btn-sm btn-outline-secondary">Desmarcar</button>
+                                    <button id="run-selected-ai" type="button" class="btn btn-sm btn-primary">✨ Mejorar seleccionados con IA (<span id="selected-count">0</span>)</button>
+                                </div>
+                            </div>
+                            <div id="ai-batch-status" class="small mt-2" role="status" aria-live="polite"></div>
                         </div>
                         <div id="results" class="list-group shadow-sm"></div>
                     </div>

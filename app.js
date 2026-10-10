@@ -386,6 +386,29 @@ unload.addEventListener('click', async () => {
 frame.addEventListener('load', () => { if (busy) void stop(); });
 window.addEventListener('pagehide', () => { void stop(); });
 
+async function generateStudentWithAI(record, signal) {
+  let raw = '';
+  const info = {};
+  try {
+    const response = await wllama.createChatCompletion({
+      abortSignal: signal, cache_prompt: true,
+      messages: [
+        {role: 'system', content: 'Eres tutor docente de Formación Profesional en Cuatrovientos. Redactas propuestas formativas prácticas, constructivas y motivadoras en formato de una línea por competencia sin introducciones.'},
+        {role: 'user', content: buildSuggestionPrompt(record)}
+      ],
+      max_tokens: 115, temperature: 0.35,
+      stop: ['\n\n\n', '<|im_end|>', '<|endoftext|>', '---']
+    });
+    raw = response?.choices?.[0]?.message?.content || '';
+  } catch {
+    signal.throwIfAborted();
+    info.reason = 'inference_failed';
+  }
+  signal.throwIfAborted();
+  const normalized = adaptModelOutputToFeedback(raw, record, info);
+  return { normalized: normalized[0], info };
+}
+
 window.addEventListener('message', async ({source, data}) => {
   if (source !== frame.contentWindow) return;
   if (data?.type === 'cancel') {
@@ -393,6 +416,57 @@ window.addEventListener('message', async ({source, data}) => {
       generationController?.abort();
       busy = false;
       active = null;
+    }
+    return;
+  }
+  if (data?.type === 'enhance-batch') {
+    const request = data.request;
+    if (typeof request !== 'string') return;
+    if (busy || stopping || loadingModel) { send({type: 'enhance-failure', request, code: 'busy'}); return; }
+    if (!aiLoaded || !wllama) {
+      send({
+        type: 'enhance-failure',
+        request,
+        code: 'not_connected',
+        detail: 'Carga el modelo IA primero pulsando el botón "Cargar IA Wllama" en la barra superior.'
+      });
+      return;
+    }
+    busy = true; active = request;
+    const controller = new AbortController(); generationController = controller;
+    state('Mejorando seleccionados con IA…', true);
+    generationTask = (async () => {
+      const records = Feedback.validateRecords(data.records);
+      for (let i = 0; i < records.length; i++) {
+        controller.signal.throwIfAborted();
+        const record = records[i], started = performance.now();
+        send({type: 'enhance-progress', request, current: i + 1, total: records.length, id: record.id});
+        const { normalized, info } = await generateStudentWithAI(record, controller.signal);
+        lastRowSeconds = Math.max(1, Math.round((performance.now() - started) / 1000));
+        controller.signal.throwIfAborted();
+        send({
+          type: 'enhance-student-result',
+          request,
+          id: record.id,
+          studentResponse: normalized,
+          provenance: info
+        });
+      }
+      if (active === request) {
+        send({type: 'enhance-complete', request});
+      }
+    })();
+    try { await generationTask; }
+    catch (err) {
+      if (active === request && !controller.signal.aborted) {
+        send({type: 'enhance-failure', request, code: 'invalid_response', detail: err?.message || String(err)});
+      }
+    } finally {
+      generationTask = null;
+      if (!stopping) {
+        busy = false; active = null; generationController = null;
+        state(aiLoaded ? readyLabel() : 'Cargar IA Wllama (GPU/CPU auto)');
+      }
     }
     return;
   }
