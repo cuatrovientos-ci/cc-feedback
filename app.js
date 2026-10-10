@@ -256,17 +256,12 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
 }
 
 function buildSuggestionPrompt(record) {
-  const compLines = record.competencias.map(c => {
-    const match = getRubricMatch(c.competencia, c.valor);
-    return `${c.competencia}: ${c.valor}/10 (Nivel ${match.level})`;
-  }).join('\n');
+  const compLines = record.competencias.map(c => `- ${c.competencia}: ${c.valor}/10`).join('\n');
 
-  return `Eres tutor docente en Cuatrovientos. Escribe un consejo de mejora pedagógico de 1 frase para cada competencia según el nivel del alumno. Inicia cada frase con un verbo de acción (ej: Participa, Diseña, Planifica, Consulta, Contrasta).
-
-Calificaciones del alumno:
+  return `Eres docente en Cuatrovientos. Escribe un consejo de mejora de 1 sola frase corta (máximo 8 palabras) para cada competencia empezando con un verbo de acción:
 ${compLines}
 
-Responde en formato TOON (una línea por cada competencia, formato "Competencia: Consejo"):
+Escribe directamente una línea por competencia (sin introducciones ni despedidas):
 ${record.competencias.map(c => `${c.competencia}: `).join('\n')}`;
 }
 
@@ -333,12 +328,13 @@ button.addEventListener('click', async () => {
     const blob = await modelBlob(controller.signal);
     controller.signal.throwIfAborted();
     state('Preparando modelo en memoria…', true);
+    const numThreads = navigator.hardwareConcurrency || 4;
     try {
-      await engine.loadModel([blob], {n_ctx: 1024, n_gpu_layers: loadedMode === 'gpu' ? 99999 : 0});
+      await engine.loadModel([blob], {n_ctx: 512, n_threads: numThreads, n_gpu_layers: loadedMode === 'gpu' ? 99999 : 0});
     } catch (err) {
       if (loadedMode === 'gpu' && !controller.signal.aborted) {
         loadedMode = 'cpu';
-        await engine.loadModel([blob], {n_ctx: 1024, n_gpu_layers: 0});
+        await engine.loadModel([blob], {n_ctx: 512, n_threads: numThreads, n_gpu_layers: 0});
       } else {
         throw err;
       }
@@ -414,8 +410,9 @@ window.addEventListener('message', async ({source, data}) => {
         try {
           const response = await wllama.createChatCompletion({
             abortSignal: controller.signal, cache_prompt: true,
-            messages:[{role:'system', content:'Eres tutor docente de Formación Profesional en Cuatrovientos. Redactas consejos de mejora prácticos en formato TOON compacto.'}, {role:'user', content:buildSuggestionPrompt(record)}],
-            max_tokens: Math.min(160, 30 + record.competencias.length * 20), temperature:0.35
+            messages:[{role:'system', content:'Eres tutor docente en Cuatrovientos. Redactas consejos de mejora ultra-breves (máximo 8 palabras por frase) en formato de una línea por competencia sin introducciones.'}, {role:'user', content:buildSuggestionPrompt(record)}],
+            max_tokens: 85, temperature:0.3,
+            stop: ['\n\n\n', '<|im_end|>', '<|endoftext|>', '---']
           });
           raw = response?.choices?.[0]?.message?.content || '';
         } catch {
