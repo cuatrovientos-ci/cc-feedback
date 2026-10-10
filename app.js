@@ -360,7 +360,11 @@ window.addEventListener('pagehide', () => { void stop(); });
 window.addEventListener('message', async ({source, data}) => {
   if (source !== frame.contentWindow) return;
   if (data?.type === 'cancel') {
-    if (busy || aiLoaded || loadingModel) void stop();
+    if (busy) {
+      generationController?.abort();
+      busy = false;
+      active = null;
+    }
     return;
   }
   if (data?.type !== 'generate' || typeof data.request !== 'string') return;
@@ -373,13 +377,14 @@ window.addEventListener('message', async ({source, data}) => {
     const records = Feedback.validateRecords(data.records);
     if (records.length > 40) throw new Error('Lote demasiado grande');
     const result = [], provenance = {};
-    const useAI = data.model === 'qwen-cpu' && aiLoaded && wllama;
+    const wantsAI = data.model === 'qwen' || data.model === 'qwen-cpu';
+    const useAI = wantsAI && aiLoaded && Boolean(wllama);
     for (let i = 0; i < records.length; i++) {
       controller.signal.throwIfAborted();
       const record = records[i], started = performance.now();
       send({type:'progress', request, stage:'waiting', current:i+1, total:records.length, estimate:useAI && lastRowSeconds ? Math.ceil(lastRowSeconds * (records.length-i)) : null});
       let raw = '';
-      const info = {reason: data.model === 'qwen-cpu' && !useAI ? 'not_loaded' : ''};
+      const info = {reason: wantsAI && !useAI ? 'not_loaded' : ''};
       if (useAI) {
         try {
           const response = await wllama.createChatCompletion({
