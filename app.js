@@ -270,18 +270,6 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
   }];
 }
 
-function buildSuggestionPrompt(record) {
-  const compLines = record.competencias.map((c, i) => {
-    const match = getRubricMatch(c.competencia, c.valor);
-    const focus = match.level <= 2 ? 'acordar pautas y apoyos' : (match.level === 3 ? 'mayor iniciativa y autonomía' : 'liderazgo y reto de ampliación');
-    return `C${i + 1}: ${c.competencia}, ${c.valor}/10. Objetivo: ${focus}.`;
-  }).join('\n');
-
-  return `Escribe en español una acción concreta de mejora por competencia, en 12 a 16 palabras.
-${compLines}
-Devuelve solo líneas con el código y el consejo: C1: consejo. No repitas el objetivo ni incluyas introducción.`;
-}
-
 async function modelBlob(signal) {
   let cache;
   try {
@@ -395,26 +383,45 @@ unload.addEventListener('click', async () => {
 frame.addEventListener('load', () => { if (busy) void stop(); });
 window.addEventListener('pagehide', () => { void stop(); });
 
-async function generateStudentWithAI(record, signal) {
-  let raw = '';
-  const info = {};
-  try {
+async function generateStudentWithAI(record, signal, onProgress = () => {}) {
+  const accepted = {};
+  let inferenceFailed = false;
+  // A small model often stops after the first item in a list. Ask for one
+  // competency at a time and associate the reply with that exact competency.
+  for (let i = 0; i < record.competencias.length; i++) {
+    signal.throwIfAborted();
+    const competency = record.competencias[i];
+    onProgress(i + 1, record.competencias.length, competency.competencia);
+    const single = {id: record.id, competencias: [competency]};
+    try {
     const response = await wllama.createChatCompletion({
       abortSignal: signal, cache_prompt: true,
       messages: [
-        {role: 'system', content: 'Eres tutor docente de Formación Profesional en Cuatrovientos. Redactas propuestas formativas prácticas, constructivas y motivadoras en formato de una línea por competencia sin introducciones.'},
-        {role: 'user', content: buildSuggestionPrompt(record)}
+        {role: 'system', content: 'Eres tutor de Formación Profesional. Responde en español con una sola acción práctica, sin introducción ni listas.'},
+        {role: 'user', content: `Competencia: ${competency.competencia}. Nota: ${competency.valor}/10. Objetivo: ${getRubricMatch(competency.competencia, competency.valor).level <= 2 ? 'practicar con pautas y apoyos' : 'desarrollar mayor autonomía y nuevos retos'}. Escribe una sugerencia concreta de 12 a 20 palabras dirigida al estudiante. Devuelve solo la frase completa.`}
       ],
-      max_tokens: Math.min(768, record.competencias.length * 64), temperature: 0.35,
+      max_tokens: 96, temperature: 0.5,
       stop: ['\n\n\n', '<|im_end|>', '<|endoftext|>', '---']
     });
-    raw = response?.choices?.[0]?.message?.content || '';
-  } catch {
     signal.throwIfAborted();
-    info.reason = 'inference_failed';
+    const choice = response?.choices?.[0];
+    if (choice?.finish_reason === 'length') continue;
+    const raw = String(choice?.message?.content || '').trim();
+    const partInfo = {};
+    const structured = adaptModelOutputToFeedback(raw, single, partInfo)[0];
+    if (partInfo.aiCompetencies.length) {
+      accepted[competency.competencia] = structured.competencias_evaluadas[0].recomendaciones;
+    } else if (!/[\n{}\[\]<>:]/.test(raw) && !isInvalidRecommendation(raw) && /[.!?…]["”']?$/.test(raw)) {
+      accepted[competency.competencia] = raw;
+    }
+    } catch {
+      signal.throwIfAborted();
+      inferenceFailed = true;
+    }
   }
   signal.throwIfAborted();
-  const normalized = adaptModelOutputToFeedback(raw, record, info);
+  const info = inferenceFailed ? {reason: 'inference_failed'} : {};
+  const normalized = adaptModelOutputToFeedback(JSON.stringify(accepted), record, info);
   return { normalized: normalized[0], info };
 }
 
@@ -422,9 +429,7 @@ window.addEventListener('message', async ({source, data}) => {
   if (source !== frame.contentWindow) return;
   if (data?.type === 'cancel') {
     if (busy) {
-      generationController?.abort();
-      busy = false;
-      active = null;
+      void stop();
     }
     return;
   }
@@ -450,7 +455,9 @@ window.addEventListener('message', async ({source, data}) => {
         controller.signal.throwIfAborted();
         const record = records[i], started = performance.now();
         send({type: 'enhance-progress', request, current: i + 1, total: records.length, id: record.id});
-        const { normalized, info } = await generateStudentWithAI(record, controller.signal);
+        const { normalized, info } = await generateStudentWithAI(record, controller.signal, (competencyCurrent, competencyTotal, competency) => {
+          send({type: 'enhance-progress', request, current: i + 1, total: records.length, id: record.id, competencyCurrent, competencyTotal, competency});
+        });
         lastRowSeconds = Math.max(1, Math.round((performance.now() - started) / 1000));
         controller.signal.throwIfAborted();
         send({
@@ -495,26 +502,17 @@ window.addEventListener('message', async ({source, data}) => {
       controller.signal.throwIfAborted();
       const record = records[i], started = performance.now();
       send({type:'progress', request, stage:'waiting', current:i+1, total:records.length, estimate:useAI && lastRowSeconds ? Math.ceil(lastRowSeconds * (records.length-i)) : null});
-      let raw = '';
-      const info = {reason: wantsAI && !useAI ? 'not_loaded' : ''};
+      let normalized, info;
       if (useAI) {
-        try {
-          const response = await wllama.createChatCompletion({
-            abortSignal: controller.signal, cache_prompt: true,
-            messages:[{role:'system', content:'Eres tutor docente de Formación Profesional en Cuatrovientos. Redactas propuestas formativas prácticas, constructivas y motivadoras en formato de una línea por competencia sin introducciones.'}, {role:'user', content:buildSuggestionPrompt(record)}],
-            max_tokens: Math.min(768, record.competencias.length * 64), temperature:0.35,
-            stop: ['\n\n\n', '<|im_end|>', '<|endoftext|>', '---']
-          });
-          raw = response?.choices?.[0]?.message?.content || '';
-        } catch {
-          controller.signal.throwIfAborted();
-          info.reason = 'inference_failed';
-        }
+        const generated = await generateStudentWithAI(record, controller.signal);
+        normalized = [generated.normalized];
+        info = generated.info;
         lastRowSeconds = Math.max(1, Math.round((performance.now()-started)/1000));
+      } else {
+        info = {reason: wantsAI ? 'not_loaded' : ''};
+        normalized = adaptModelOutputToFeedback('', record, info);
       }
       controller.signal.throwIfAborted();
-      const normalized = adaptModelOutputToFeedback(raw, record, info);
-      if (useAI && info.method !== 'ai' && !info.reason) info.reason = 'incomplete';
       provenance[record.id] = info;
       result.push(...Feedback.response(JSON.stringify(normalized), [record]));
     }

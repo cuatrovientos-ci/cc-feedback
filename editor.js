@@ -202,6 +202,7 @@ window.addEventListener('message', event => {
     if (statusEl) {
       statusEl.className = 'small mt-2 text-primary';
       statusEl.textContent = `Generando con IA para alumno ${message.current} de ${message.total}... El tiempo depende del equipo.`;
+      if (message.competencyCurrent) statusEl.textContent = `Alumno ${message.current} de ${message.total}. Competencia ${message.competencyCurrent} de ${message.competencyTotal}: ${message.competency}. Generando sugerencia…`;
     }
     const cardObj = studentCards.get(message.id);
     if (cardObj) {
@@ -239,9 +240,9 @@ window.addEventListener('message', event => {
       if (changes.length) {
         const method = cardObj.aiCompetencies.size === record.competencias.length ? 'Con IA local' : 'Mixto: IA local y reglas';
         cardObj.area.value = cardObj.area.value.replace(/Método de elaboración: [^\n]+$/, `Método de elaboración: ${method}. Revisión docente requerida antes de su envío.`);
-        cardObj.methodBadge.textContent = `${changes.length} sugerencia(s) actualizada(s) con IA`;
+        cardObj.methodBadge.textContent = `${changes.length} de ${record.competencias.length} sugerencias actualizadas con IA`;
         cardObj.methodBadge.className = 'badge bg-success text-white border method-badge';
-        cardObj.changeNotice.textContent = `Sugerencias actualizadas: ${changes.join(', ')}. Las valoraciones de rúbrica no cambian.`;
+        cardObj.changeNotice.textContent = `Sugerencias actualizadas: ${changes.join(', ')}. Las valoraciones de rúbrica no cambian.${changes.length < record.competencias.length ? ' Las demás sugerencias conservan su texto anterior.' : ''}`;
         cardObj.check.checked = false;
         cardObj.gmail.disabled = true;
       } else {

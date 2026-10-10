@@ -30,23 +30,30 @@ const server = http.createServer((req, res) => {
     async function improve(mode) {
       await page.evaluate(mode => {
         aiLoaded = true;
+        let calls = 0;
+        globalThis.testCalls = 0;
         wllama = {async createChatCompletion(options) {
+          const index = ++calls;
+          globalThis.testCalls = calls;
           if (mode === 'failure') throw new Error('Test failure');
-          const content = mode === 'partial' ? '**C1**: Compara dos propuestas del proyecto y justifica tu elección con una prueba práctica.'
+          const content = mode === 'partial' ? (index === 1 ? '**C1**: Compara dos propuestas del proyecto y justifica tu elección con una prueba práctica.' : 'Lo siento.')
             : mode === 'invalid' ? 'Lo siento.'
-            : Array.from({length:6}, (_,i) => `C${i+1}: Practica la actividad ${i+1} con tu equipo y registra una evidencia concreta del progreso.`).join('\n');
-          if (options.max_tokens < 300) throw new Error('Insufficient output budget');
-          return {choices:[{message:{content}}]};
+            : `Practica la actividad ${index} con tu equipo y registra una evidencia concreta del progreso.`;
+          if (options.max_tokens !== 96) throw new Error('Unexpected output budget');
+          return {choices:[{message:{content}, finish_reason:mode === 'truncated' ? 'length' : 'stop'}]};
         }};
       }, mode);
       await editor.locator('.btn-ai-single').first().click();
       await page.waitForFunction(() => !busy);
       await editor.locator('#ai-batch-status').filter({hasText:/actualizada|conservan/}).waitFor();
+      assert.equal(await page.evaluate(() => globalThis.testCalls), 6);
     }
     await improve('failure');
     assert.equal(await draft.inputValue(), before);
     assert.match(await editor.locator('.method-badge').first().innerText(), /Sin cambios/);
     await improve('invalid');
+    assert.equal(await draft.inputValue(), before);
+    await improve('truncated');
     assert.equal(await draft.inputValue(), before);
     await improve('partial');
     const partial = await draft.inputValue();
@@ -74,6 +81,22 @@ const server = http.createServer((req, res) => {
     // Responses use text nodes/textarea, never HTML, and stale requests cannot overwrite drafts.
     await page.evaluate(() => send({type:'enhance-student-result', request:'stale', studentResponse:{}}));
     assert.equal(await draft.inputValue(), edited);
+    await page.evaluate(() => {
+      globalThis.testCalls = 0;
+      wllama = {
+        createChatCompletion({abortSignal}) {
+          globalThis.testCalls++;
+          return new Promise((resolve, reject) => abortSignal.addEventListener('abort', () => reject(new Error('Aborted')), {once:true}));
+        },
+        async exit() { globalThis.testExited = true; }
+      };
+    });
+    await editor.locator('.btn-ai-single').first().click();
+    await page.waitForFunction(() => globalThis.testCalls === 1);
+    await editor.locator('#erase').click();
+    await page.waitForFunction(() => globalThis.testExited && !stopping && !busy);
+    assert.equal(await page.evaluate(() => globalThis.testCalls), 1);
+    assert.equal(await editor.locator('.result-text').count(), 0);
     console.log('PASS: failures, invalid/partial/full output, unchanged rubric, identical output, teacher edits, review reset, stale results');
   } finally {if(browser) await browser.close(); await new Promise(r=>server.close(r));}
 })().catch(err => {console.error(err);process.exitCode=1;});
