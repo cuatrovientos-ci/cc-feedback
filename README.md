@@ -1,14 +1,15 @@
-# CC-feedback: propuestas formativas locales
+# CC-feedback con Puter
 
-Rama `webbrowser-llm`. Combina propuestas por reglas con IA opcional **Wllama 3.8.1 y Qwen 2.5 0.5B Instruct GGUF Q4_K_M**, ejecutada en el navegador por CPU. PythonAnywhere sirve los archivos de la web; la aplicación no incluye un servidor de inferencia.
+Rama `puter-llm`, creada desde `webbrowser-llm` conservando el estado de la aplicación. La versión de inferencia local sigue disponible en esa rama. Esta variante sustituye Wllama por Puter para las sugerencias opcionales. Conserva Flask, administración Google, SQLite, rúbricas, borradores por reglas, mejora por competencia, revisión docente y aislamiento de identidades.
 
 ## Uso
 
-1. Abre la web por HTTPS o localhost. Pega hasta **40 filas** de notas de 0 a 10. Cabecera, nombre, correo y total son opcionales. Sin nombres se asigna Alumno1, Alumno2, etc.; los correos de ejemplo deben sustituirse antes de enviar.
-2. Elige propuestas por reglas para empezar sin descargar un modelo. Para IA, pulsa «Cargar IA Wllama» y selecciona la opción de IA en el editor. Prueba una fila antes de un lote: el rendimiento y la memoria dependen del dispositivo.
-3. Cada borrador indica **Propuestas por reglas**, **Con IA local** o **Mixto**. Si la IA no está cargada, falla o entrega texto incompleto, se indica que se han usado reglas. Esta etiqueta describe el origen, no garantiza calidad pedagógica.
-4. Abre el borrador colapsado, revisa y adapta. Editarlo invalida la confirmación. Gmail solo se abre tras revisión y acción expresa; no se envía correo automáticamente.
-5. Cancelar envía una señal de interrupción, espera a que el motor la atienda y libera su instancia antes de permitir otra generación. La interrupción puede tardar durante una operación Wasm o la inicialización. Los resultados tardíos se descartan. Borrar los datos o caducar la sesión también libera el motor; para volver a usar IA hay que cargarlo de nuevo desde la caché.
+1. Abre la web por HTTPS o localhost. Introduce hasta 40 filas con seis notas entre 0 y 10. Cabecera, nombre, correo y total son opcionales. Sin identidad se crean Alumno1, Alumno2 y correos de ejemplo que deben sustituirse antes de enviar.
+2. Genera los borradores con rúbricas. Este paso no conecta con Puter ni descarga modelos.
+3. Para IA, pulsa **Conectar con Puter**. Solo entonces se carga `https://js.puter.com/v2/`. El botón cambia a **Acceder a Puter**. Pulsa de nuevo para abrir la autenticación mediante un gesto explícito del usuario.
+4. Selecciona alumnos o pulsa **Mejorar con IA**. Se solicita una sugerencia por competencia, de forma secuencial, con progreso. Las valoraciones de rúbrica siguen calculándose mediante código. Cada petición contiene solo el nombre canónico de una competencia, su nota y una instrucción pedagógica derivada.
+5. El borrador indica cuántas sugerencias han cambiado. Respuestas inválidas, truncadas o iguales no cuentan como mejora. Se conservan las sugerencias editadas por el docente. Cualquier cambio aplicado exige revisar de nuevo antes de abrir Gmail.
+6. **Cancelar generación** detiene la cola y descarta respuestas tardías. No garantiza cancelar el procesamiento o borrar una solicitud ya recibida por Puter. Borrar datos retira también los borradores del editor.
 
 ```text
 1 2 3 4 5 6
@@ -16,62 +17,58 @@ Rama `webbrowser-llm`. Combina propuestas por reglas con IA opcional **Wllama 3.
 9 3 4 5 6 4
 ```
 
+## Configuración de Puter
+
+`model-config.js` contiene configuración pública, sin secretos: SDK, modelo `gemini-3.5-flash-lite` y límite de espera de 90 segundos por petición. El modelo se puede cambiar por otro compatible con Puter. La cuenta Puter gestiona el acceso y las cuotas o costes que correspondan. No se necesita una clave de API en `.env`. La cuenta Puter es independiente del acceso Google del panel administrativo.
+
+La integración usa `puter.ai.chat(messages, {model, normalize: true, stream: false, max_tokens: 160, temperature: 0.5})`. Lee `response.message.content` y `response.finish_reason`. Un error de red, cuenta, cuota o tiempo detiene las peticiones restantes de ese alumno y conserva sus textos previos cuando no se han obtenido sugerencias utilizables.
+
+Fuentes de integración: [chat](https://docs.puter.com/AI/chat/), [respuesta](https://docs.puter.com/Objects/chatresponse/) y [autenticación](https://docs.puter.com/Auth/signIn/). No se ha verificado una cuenta real ni el coste o rendimiento efectivo del modelo.
+
 ## Criterios pedagógicos
 
-Las notas no se convierten automáticamente en niveles de rúbrica. Las propuestas por reglas plantean actividades, sin atribuir hábitos, personalidad o conductas observadas. La IA recibe instrucciones equivalentes, pero puede incumplirlas: la revisión docente sigue siendo necesaria. No se presentan estas reglas como equivalencias aprobadas por el centro. Cualquier futura conversión nota–nivel debe validarse institucionalmente.
+La programación selecciona niveles de rúbrica con estos intervalos: menor de 5, de 5 a menos de 7, de 7 a menos de 8,5 y desde 8,5. El centro debe validar estos intervalos y las correspondencias entre competencias y subcompetencias. Puter solo propone sugerencias. El docente revisa antes de utilizar los resultados o abrir Gmail.
 
 ## Privacidad y adecuación al RGPD
 
-Nombres, correos y total permanecen en el editor aislado. El motor recibe códigos temporales, competencias y notas; la generación es local. Los datos del alumnado y borradores no se guardan deliberadamente en almacenamiento persistente. Se retiran al borrar, cancelar, salir o tras quince minutos de inactividad; la suspensión puede retrasar la limpieza. Los errores conservan temporalmente la entrada para reintentar.
+Nombres, correos y total permanecen en el editor con sandbox sin `allow-same-origin` y CSP restrictiva. El puente interno transmite códigos temporales, competencias y notas. Los códigos tampoco se incorporan al prompt externo. La aplicación no envía a Puter nombres, correos, total, borradores, rúbricas administrativas ni textos libres del alumnado.
 
-El runtime se sirve desde `assets/vendor`, junto con la web. El modelo se descarga de Hugging Face desde una revisión fija, configurada en `model-config.js`. PythonAnywhere y el distribuidor del modelo pueden tratar IP y metadatos de conexión. Gmail recibe destinatario y texto al abrir el borrador. El procesamiento local no garantiza anonimato ni cumplimiento automático: deben completarse responsable, DPD, base jurídica, conservación, condiciones de proveedores y autorización del centro.
+**Las notas y competencias sí salen del dispositivo al solicitar mejoras.** Puter y el proveedor del modelo pueden tratar además información de cuenta y conexión. Esta separación reduce la información transmitida, pero no garantiza anonimato ni cumplimiento del RGPD. Antes del uso real, el centro debe revisar proveedores, condiciones, conservación, transferencias y autorización con su DPD. Mientras tanto, utiliza datos ficticios.
 
-Solo el modelo se almacena en la caché `cc-feedback-model-v1` (Cache Storage). «Limpiar caché» elimina esa caché y comprueba que desaparece; no borra otros datos del origen ni cachés antiguas de Wllama. Para restos de versiones anteriores, utiliza la gestión de almacenamiento del navegador. Si no hay espacio o permiso para caché, se intenta cargar en memoria. No se garantiza funcionamiento offline completo ni compatibilidad universal.
+La aplicación no guarda deliberadamente notas o borradores en SQLite ni en almacenamiento web persistente. SQLite guarda configuración pedagógica; Google gestiona la autenticación administrativa y la sesión incluye datos de la cuenta. Las rúbricas y consejos se distribuyen públicamente: no deben incluir datos personales. `ADMIN_USER` vacío o con `*` permite todas las cuentas corporativas verificadas, por lo que debe configurarse la lista autorizada.
+
+Borrar, salir o quince minutos de inactividad retiran los datos del editor. La suspensión puede retrasarlo. El SDK puede conservar su sesión de autenticación. La limpieza local no borra datos de Puter, Google, exportaciones, portapapeles ni copias externas. «Limpiar caché antigua» elimina únicamente `cc-feedback-model-v1`, para equipos que usaron la otra rama. Los archivos históricos Wllama permanecen en el repositorio pero esta variante no los carga ni descarga pesos.
 
 ## Flujo de datos
 
 ```mermaid
 flowchart TD
-    H[PythonAnywhere: HTML, JS y runtime Wasm] --> B[Navegador]
-    HF[Hugging Face: modelo con revisión fija] --> C[Caché del modelo en el equipo]
+    H[PythonAnywhere Europa: Flask y archivos] --> B[Navegador]
     E[Editor aislado: identidades y notas] --> P[Códigos temporales, competencias y notas]
-    P --> R[Propuestas por reglas]
-    P --> W[Wllama opcional: inferencia local]
-    C --> W
-    R --> V[Validación y etiqueta del método]
+    P --> R[Rúbricas y propuestas por reglas]
+    P --> S[Selección de alumnos y competencias]
+    S -->|Solo competencia, nota e instrucción| W[Puter y proveedor del modelo]
+    R --> V[Validación y método de elaboración]
     W --> V
     V --> E
     E --> D[Revisión docente del borrador]
     D -->|Acción expresa| G[Gmail: texto y destinatario]
-    E --> X[Borrado o inactividad: retirar datos de la sesión]
+    A[Administración Google] --> DB[SQLite: rúbricas y ajustes]
+    DB --> B
 ```
 
-## Despliegue y rendimiento
+## Despliegue en PythonAnywhere
 
-Publica los archivos de esta rama, incluidos `model-config.js` y `assets/vendor`, en PythonAnywhere. No utilices el ZIP histórico de `dist`: no se actualiza automáticamente. Sirve `.js` como JavaScript y `.wasm` como `application/wasm`, por HTTPS. No se ha comprobado desde este repositorio la configuración del despliegue real.
+Publica esta rama completa y pulsa **Reload**. `.env` se carga junto a `server.py`, con prioridad de variables del proceso. Conserva `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SECRET_KEY` estable y `ADMIN_USER` del panel. `DATABASE_PATH` relativo se resuelve desde el directorio de la aplicación. No se necesita instalar un modelo ni un paquete Python de Puter.
 
-El motor muestra el número real de hilos tras cargar. Para habilitar varios hilos, evalúa las cabeceras `Cross-Origin-Opener-Policy: same-origin` y `Cross-Origin-Embedder-Policy: require-corp`. Deben probarse en el dominio real con el iframe, descargas y apertura de Gmail. No se modifican automáticamente las cabeceras del servidor. Tras la primera fila con IA se ofrece una estimación orientativa para las restantes; no se guarda entre sesiones.
+La página principal utiliza `Cross-Origin-Opener-Policy: same-origin-allow-popups` para permitir la autenticación de Puter. `Cross-Origin-Embedder-Policy: unsafe-none` evita bloquear su SDK y ventanas externas. Se conserva el sandbox/CSP del editor y la lista explícita de archivos públicos que bloquea `.env`, SQLite y Python. No vuelvas a imponer globalmente las cabeceras de multihilo de Wllama mediante un proxy.
 
-El runtime oficial se incluye con versión fija; su paquete se verificó contra la integridad SHA-512 publicada en npm. Los pesos no se incluyen en Git. Consulta la licencia incluida en `assets/vendor/wllama-3.8.1/LICENCE` y las condiciones del modelo antes de autorizar su uso.
+Los mapeos estáticos de PythonAnywhere pueden omitir cabeceras Flask. Nunca publiques la raíz del repositorio. Comprueba estilos y scripts del editor, acceso a Puter y administración después de recargar. El cambio de rama no acredita un despliegue. La protección CSRF y el refuerzo de sesiones administrativas siguen pendientes de revisión.
 
-## Verificación
+## Pruebas
 
-`node --test tests/core.test.cjs` verifica entradas y correspondencia de resultados. `node tests/browser.cjs` requiere Playwright y un navegador; `CC_BROWSER` permite indicar su ruta. El navegador utiliza un Wllama simulado: comprueba reglas, IA, etiquetas de sustitución, aislamiento, revisión, cancelación, borrado selectivo y caducidad, pero no acredita calidad ni rendimiento del modelo real.
+- `node --test tests/core.test.cjs`: entradas, minimización y correspondencia de resultados.
+- `node tests/enhancement.browser.cjs`: requiere Playwright y navegador; `BROWSER_EXECUTABLE` permite indicar su ejecutable. Simula Puter, verifica conexión explícita, payload sin identidades, seis sugerencias, fallos, truncado, ediciones, revisión y cancelación con respuesta tardía.
+- `python tests/test_server.py`: usa una copia temporal y una base de datos simulada; comprueba `.env`, archivos privados y cabeceras.
 
-Antes de publicar, prueba con datos ficticios en equipos del centro: descarga, una fila y lote, cancelación durante descarga/generación, revisión del contenido y ausencia de envío de notas en la pestaña de red. Comprueba también los registros y condiciones de PythonAnywhere.
-
-## Prueba experimental de GPU
-
-Abre «Prueba de aceleración GPU» y pulsa «Comprobar GPU». La prueba solicita un adaptador y un dispositivo WebGPU; no modifica políticas ni requiere abrir chrome://gpu. Una respuesta positiva no garantiza que el modelo sea compatible o más rápido.
-
-Selecciona GPU antes de cargar el modelo y pulsa «Probar fila ficticia». Utiliza la misma estructura de seis competencias y límite de respuesta que la generación habitual. La descarga y carga se excluyen del tiempo. El límite de 120 segundos cancela la inferencia; la interrupción puede tardar en ser atendida por el motor. Se distingue una respuesta completa de una que necesita reglas.
-
-La interfaz solo confirma transferencia de capas a GPU si el motor la comunica en su registro de inicialización; en caso contrario indica «aceleración efectiva no confirmada». Nunca interpreta los hilos de CPU como uso de GPU. No hay cambio automático a CPU tras un fallo: retira el modelo y selecciona CPU expresamente para comparar. No se guardan los resultados de la prueba. Validar en el navegador y equipo reales antes de recomendar este modo.
-
-## Recursos del editor y configuración WSGI
-
-El `.env` se carga explícitamente junto a `server.py`, aceptando UTF-8 con o sin BOM. Las variables ya definidas en el proceso tienen prioridad. Tras cambiarlo, pulsa **Reload** en Web de PythonAnywhere. `DATABASE_PATH` relativo se resuelve desde el directorio del proyecto. Configura una `SECRET_KEY` aleatoria y estable para conservar las sesiones entre procesos y recargas.
-
-El editor conserva su sandbox sin `allow-same-origin`. Los recursos públicos incluyen `Cross-Origin-Resource-Policy: cross-origin` para poder cargarse desde ese origen opaco bajo COEP. No se permite descargar `.env`, SQLite, código Python ni archivos privados mediante la ruta de recursos.
-
-Si PythonAnywhere tiene mapeos de Static files para `/assets/` u otros recursos, estos pueden omitir las cabeceras Flask: retíralos para que los recursos pasen por esta aplicación, o configura las mismas cabeceras en la capa que los sirve. Nunca mapees la raíz del repositorio como directorio público. Comprueba CSS, imagen y scripts del iframe después de recargar.
+Las pruebas simuladas no acreditan disponibilidad, calidad, velocidad, cuotas ni condiciones del servicio real. Antes de publicar, prueba una fila ficticia con una cuenta autorizada. El informe Word y el portal común describen la variante local y no cambian automáticamente por crear esta rama.

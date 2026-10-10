@@ -86,7 +86,7 @@ function reset(message = '') {
 }
 
 const failures = {
-  not_connected: 'El motor local no está listo. Vuelve a intentarlo.',
+  not_connected: 'Puter no está conectado. Vuelve a intentarlo.',
   busy: 'Ya hay una generación en curso.',
   cancelled: 'Generación detenida.',
   invalid_input: 'Usa como máximo 40 filas válidas por lote.',
@@ -111,7 +111,7 @@ function fail(code, detail = '') {
 
 function progress(stage) {
   document.getElementById('progress-detail').textContent = ({
-    waiting: 'Generando en este dispositivo…',
+    waiting: 'Preparando las recomendaciones…',
     receiving: 'Recibiendo las recomendaciones…',
     validating: 'Comprobando que cada respuesta corresponde a su alumno…'
   })[stage] || 'Generando recomendaciones…';
@@ -238,7 +238,7 @@ window.addEventListener('message', event => {
       }
       enhancementChanges += changes.length;
       if (changes.length) {
-        const method = cardObj.aiCompetencies.size === record.competencias.length ? 'Con IA local' : 'Mixto: IA local y reglas';
+        const method = cardObj.aiCompetencies.size === record.competencias.length ? 'Con IA mediante Puter' : 'Mixto: Puter y reglas';
         cardObj.area.value = cardObj.area.value.replace(/Método de elaboración: [^\n]+$/, `Método de elaboración: ${method}. Revisión docente requerida antes de su envío.`);
         cardObj.methodBadge.textContent = `${changes.length} de ${record.competencias.length} sugerencias actualizadas con IA`;
         cardObj.methodBadge.className = 'badge bg-success text-white border method-badge';
@@ -322,7 +322,7 @@ window.addEventListener('message', event => {
     for (const response of responses) {
       const person = identities.get(response.id);
       const info = message.provenance?.[response.id] || {};
-      const method = ({ rules: 'Propuestas por reglas', ai: 'Con IA local', mixed: 'Mixto: IA local y reglas' })[info.method] || 'Propuestas por reglas';
+      const method = ({ rules: 'Propuestas por reglas', ai: 'Con IA mediante Puter', mixed: 'Mixto: Puter y reglas' })[info.method] || 'Propuestas por reglas';
       const reason = ({ not_loaded: 'La IA no estaba cargada.', inference_failed: 'La IA falló; se aplicaron reglas.', incomplete: 'La respuesta de IA se completó con reglas.' })[info.reason] || '';
 
       let body = `Hola, ${person.name}:\n\n${response.intro}\n\n`;

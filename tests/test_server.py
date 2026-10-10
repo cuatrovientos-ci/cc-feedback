@@ -43,6 +43,11 @@ class ServerTests(unittest.TestCase):
         self.assertNotIn('Configuración requerida de Google Cloud Console',html)
         self.assertNotIn('fixture-secret',html)
         self.assertNotIn('fixture@cuatrovientos.org',html)
+    def test_puter_popup_headers(self):
+        for path in ['/', '/index.html']:
+            self.assertEqual(self.client.get(path).headers['Cross-Origin-Opener-Policy'], 'same-origin-allow-popups')
+        self.assertEqual(self.client.get('/admin/login').headers['Cross-Origin-Opener-Policy'], 'same-origin')
+
     def test_private_files_never_served(self):
         (self.root/'feedback.db').write_bytes(b'private')
         for path in ['/.env','/.env.example','/feedback.db','/server.py','/database.py','/wsgi.py','/templates/login.html','/assets/../.env','/assets/.secret']:
@@ -53,7 +58,7 @@ class ServerTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(response.status_code,200)
                 self.assertEqual(response.headers['Cross-Origin-Resource-Policy'],'cross-origin')
-                self.assertEqual(response.headers['Cross-Origin-Embedder-Policy'],'require-corp')
+                self.assertEqual(response.headers['Cross-Origin-Embedder-Policy'],'unsafe-none')
         self.assertNotIn('Cross-Origin-Resource-Policy',self.client.get('/admin/login').headers)
 
 if __name__=='__main__':

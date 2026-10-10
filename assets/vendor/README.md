@@ -1,3 +1,5 @@
+En la rama `puter-llm` estos recursos históricos no se cargan. Se conservan para referencia y para la variante `webbrowser-llm`; `model-config.js` configura ahora Puter.
+
 # Runtime local
 
 Paquetes oficiales npm @wllama/wllama y @wllama/wllama-compat, versión 3.8.1.

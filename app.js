@@ -7,64 +7,61 @@ const spinner = document.getElementById('connect-spinner');
 const unload = document.getElementById('unload');
 const cleanCache = document.getElementById('clean-cache');
 
-let wllama = null, aiLoaded = false, busy = false, active = null;
-let loadingModel = false, stopping = null, loadController = null, generationController = null;
-let loadTask = null, generationTask = null, loadTimer = null, lastRowSeconds = null;
-const config = globalThis.CC_MODEL;
-let loadedMode = 'cpu', offloadedLayers = 0;
-function readyLabel() { return loadedMode === 'gpu' ? 'IA Wllama lista (GPU activa)' : 'IA Wllama lista (CPU)'; }
-function backendLabel() {
-  return loadedMode === 'gpu' ? (offloadedLayers > 0 ? `GPU activa (${offloadedLayers} capas transferidas)` : 'GPU activa') : 'CPU (sin aceleración GPU)';
-}
-async function checkWebGPUAvailable() {
-  if (!isSecureContext || !navigator.gpu) return false;
-  try {
-    const adapter = await navigator.gpu.requestAdapter({powerPreference:'high-performance'});
-    if (!adapter || adapter.isFallbackAdapter || adapter.info?.isFallbackAdapter) return false;
-    const device = await adapter.requestDevice();
-    device.destroy();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
+let aiLoaded = false, busy = false, active = null;
+let loadingModel = false, stopping = null, generationController = null;
+let generationTask = null, lastRowSeconds = null, sdkTask = null;
+const config = globalThis.CC_PUTER;
+function readyLabel() { return 'Puter conectado'; }
 function state(text, working = false) {
   label.textContent = text;
   spinner.hidden = !working;
   button.disabled = working || aiLoaded || busy || Boolean(stopping);
   button.setAttribute('aria-busy', String(working));
-  unload.disabled = !(wllama || loadingModel || busy);
+  unload.disabled = !busy;
   cleanCache.disabled = loadingModel || busy || Boolean(stopping);
 }
 function send(message) { frame.contentWindow.postMessage(message, '*'); }
 
+// Puter does not document remote cancellation. Abort/timeout discards the local
+// result and stops the queue, but cannot retract a request already sent.
+function waitForProvider(promise, signal, timeoutMs = config.timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let timer;
+    const cleanup = () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); };
+    const abort = () => { cleanup(); reject(signal.reason || new DOMException('Cancelled', 'AbortError')); };
+    if (signal?.aborted) { abort(); return; }
+    signal?.addEventListener('abort', abort, {once: true});
+    timer = setTimeout(() => { cleanup(); reject(new Error('Tiempo de respuesta de Puter agotado.')); }, timeoutMs);
+    Promise.resolve(promise).then(value => { cleanup(); resolve(value); }, error => { cleanup(); reject(error); });
+  });
+}
 async function stop() {
   if (stopping) return stopping;
-  clearTimeout(loadTimer);
   active = null;
-  loadController?.abort();
   generationController?.abort();
-  stopping = (async () => {
-    // Wait until abort has been observed before releasing or reusing the engine.
-    await Promise.allSettled([loadTask, generationTask].filter(Boolean));
-    const engine = wllama;
-    wllama = null;
-    if (engine) { try { await engine.exit(); } catch {} }
-    aiLoaded = false; busy = false; loadingModel = false;
-  })();
-  state('Deteniendo…', true);
+  stopping = Promise.allSettled([generationTask].filter(Boolean));
+  state('Cancelando…', true);
   try { await stopping; } finally {
-    stopping = null;
-    state('Cargar IA Wllama (GPU/CPU auto)');
+    stopping = null; busy = false;
+    state(aiLoaded ? readyLabel() : (globalThis.puter ? 'Acceder a Puter' : 'Conectar con Puter'));
   }
 }
-
 async function clearStorageQuota() {
   if (!globalThis.caches) throw new Error('Este navegador no permite gestionar la caché.');
-  // This app only owns its explicitly named cache. Never clear an entire origin.
-  await caches.delete(config.cache);
-  if ((await caches.keys()).includes(config.cache)) throw new Error('No se pudo verificar el borrado.');
+  await caches.delete('cc-feedback-model-v1');
+  if ((await caches.keys()).includes('cc-feedback-model-v1')) throw new Error('No se pudo verificar el borrado.');
+}
+function loadPuter() {
+  if (globalThis.puter) return Promise.resolve();
+  if (sdkTask) return sdkTask;
+  const script = document.createElement('script');
+  script.src = config.sdk; script.async = true; script.referrerPolicy = 'no-referrer';
+  sdkTask = waitForProvider(new Promise((resolve, reject) => {
+    script.onload = () => globalThis.puter ? resolve() : reject(new Error('Puter no disponible.'));
+    script.onerror = () => reject(new Error('No se pudo cargar Puter.'));
+    document.head.append(script);
+  }), null, 20000).catch(error => { script.remove(); sdkTask = null; throw error; });
+  return sdkTask;
 }
 
 function getRubricMatch(compName, score) {
@@ -270,115 +267,46 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
   }];
 }
 
-async function modelBlob(signal) {
-  let cache;
-  try {
-    cache = await caches.open(config.cache);
-    const stored = await cache.match(config.url);
-    if (stored) return await stored.blob();
-  } catch { /* Storage may be disabled; memory-only loading remains available. */ }
-  signal.throwIfAborted();
-  const response = await fetch(config.url, {signal, credentials: 'omit', referrerPolicy: 'no-referrer'});
-  if (!response.ok) throw new Error(`Descarga HTTP ${response.status}`);
-  const reader = response.body.getReader(), chunks = [];
-  const total = Number(response.headers.get('content-length') || 0);
-  let loaded = 0;
-  while (true) {
-    const {done, value} = await reader.read();
-    if (done) break;
-    signal.throwIfAborted(); chunks.push(value); loaded += value.length;
-    state(total ? `Descargando modelo: ${Math.round(100 * loaded / total)} %` : `Descargando: ${Math.round(loaded / 1048576)} MB`, true);
-  }
-  signal.throwIfAborted();
-  const blob = new Blob(chunks);
-  try {
-    if (cache) {
-      try { await cache.delete(config.url); } catch {}
-      await cache.put(config.url, new Response(blob));
-    }
-  } catch {
-    connection.hidden = false;
-    connection.className = 'alert alert-info mt-2';
-    connection.textContent = 'Aviso: La caché en disco está llena. El modelo se carga directamente en memoria RAM.';
-  }
-  signal.throwIfAborted();
-  return blob;
-}
-
 button.addEventListener('click', async () => {
   if (loadingModel || busy || stopping || aiLoaded) return;
   loadingModel = true; connection.hidden = true;
-  const controller = new AbortController(); loadController = controller;
-  state('Iniciando Wllama…', true);
-  loadTimer = setTimeout(() => controller.abort(new Error('Tiempo de carga agotado.')), 600000);
-  loadTask = (async () => {
-    const {Wllama} = await import(config.runtime);
-    controller.signal.throwIfAborted();
-    state('Detectando aceleración GPU…', true);
-    const hasGPU = await checkWebGPUAvailable();
-    loadedMode = hasGPU ? 'gpu' : 'cpu';
-    offloadedLayers = 0;
-    lastRowSeconds = null;
-    controller.signal.throwIfAborted();
-    const captureLog = (...args) => {
-      // Only inspect backend initialization messages; never persist prompts or outputs.
-      const line = args.filter(v => typeof v === 'string').join(' ');
-      const match = /offloaded\s+(\d+)\s*\/\s*\d+\s+layers/i.exec(line);
-      if (match) offloadedLayers = Number(match[1]);
-    };
-    const engine = new Wllama({default: config.wasm}, {logger:{debug:captureLog,log:captureLog,info:captureLog,warn:captureLog,error:captureLog}}); wllama = engine;
-    if (!globalThis.crossOriginIsolated) {
-      engine.setCompat({worker: config.compatWorker, wasm: config.compatWasm}, 'all');
+  try {
+    if (!globalThis.puter) {
+      state('Preparando Puter…', true);
+      await loadPuter();
+      // A second explicit click keeps signIn inside a browser user gesture.
+      connection.textContent = 'Puter preparado. Pulsa «Acceder a Puter» para iniciar sesión. No se han enviado notas.';
+    } else {
+      state('Accediendo a Puter…', true);
+      if (!puter.auth.isSignedIn()) await waitForProvider(puter.auth.signIn(), null);
+      if (!puter.auth.isSignedIn()) throw new Error('No se ha completado el acceso a Puter.');
+      aiLoaded = true;
+      connection.textContent = `Puter conectado. Modelo: ${config.model}. Solo se envían competencias y notas al solicitar una mejora.`;
     }
-    const blob = await modelBlob(controller.signal);
-    controller.signal.throwIfAborted();
-    state('Preparando modelo en memoria…', true);
-    const numThreads = navigator.hardwareConcurrency || 4;
-    try {
-      await engine.loadModel([blob], {n_ctx: 2048, n_threads: numThreads, n_gpu_layers: loadedMode === 'gpu' ? 99999 : 0});
-    } catch (err) {
-      if (loadedMode === 'gpu' && !controller.signal.aborted) {
-        loadedMode = 'cpu';
-        await engine.loadModel([blob], {n_ctx: 2048, n_threads: numThreads, n_gpu_layers: 0});
-      } else {
-        throw err;
-      }
-    }
-    controller.signal.throwIfAborted();
-    aiLoaded = true;
-    connection.hidden = false;
-    connection.className = 'alert alert-success mt-2';
-    connection.textContent = `Modelo Qwen 0.5B listo. ${backendLabel()}.`;
-  })();
-  try { await loadTask; }
-  catch {
-    if (!stopping) {
-      connection.hidden = false; connection.className = 'alert alert-warning mt-2';
-      connection.textContent = controller.signal.aborted ? 'Carga interrumpida o tiempo agotado.' : 'No se pudo cargar el modelo en este navegador.';
-      const engine = wllama; wllama = null;
-      if (engine) { try { await engine.exit(); } catch {} }
-      aiLoaded = false;
-    }
+    connection.className = 'alert alert-info mt-2';
+  } catch {
+    aiLoaded = false;
+    connection.className = 'alert alert-warning mt-2';
+    connection.textContent = 'No se pudo conectar con Puter. Revisa la conexión, permite la ventana de acceso y vuelve a intentarlo.';
   } finally {
-    clearTimeout(loadTimer); loadingModel = false; loadTask = null;
-    if (!stopping) state(aiLoaded ? readyLabel() : 'Cargar IA Wllama (GPU/CPU auto)');
+    loadingModel = false;
+    connection.hidden = !aiLoaded && Boolean(globalThis.puter) && connection.className.includes('alert-info');
+    state(aiLoaded ? readyLabel() : (globalThis.puter ? 'Acceder a Puter' : 'Conectar con Puter'));
   }
 });
-
 cleanCache.addEventListener('click', async () => {
   if (busy || loadingModel || stopping) return;
-  await stop(); state('Limpiando caché del modelo…', true); cleanCache.disabled = true;
-  try {
-    await clearStorageQuota();
-    connection.textContent = 'Caché de esta versión eliminada y borrado verificado. Las cachés de versiones anteriores no se modifican.';
-  } catch { connection.textContent = 'No se pudo verificar el borrado de la caché. Revisa el almacenamiento del sitio en el navegador.'; }
-  finally { connection.hidden = false; state('Cargar IA Wllama (CPU · Opcional)'); }
+  state('Limpiando caché antigua…', true);
+  try { await clearStorageQuota(); connection.textContent = 'Caché cc-feedback-model-v1 eliminada. No se han borrado datos de Puter ni otras cachés.'; }
+  catch { connection.textContent = 'No se pudo verificar el borrado de la caché antigua.'; }
+  finally { connection.hidden = false; state(aiLoaded ? readyLabel() : 'Conectar con Puter'); }
 });
 unload.addEventListener('click', async () => {
   const request = active;
-  if (request) send({type:'failure', request, code:'cancelled'});
+  if (request) send({type:'enhance-failure', request, code:'cancelled'});
   await stop();
-  connection.hidden = false; connection.textContent = 'Modelo retirado de memoria. Puedes continuar con propuestas por reglas.';
+  connection.hidden = false;
+  connection.textContent = 'Cola cancelada. Una solicitud ya enviada puede continuar en Puter, pero su respuesta no se aplicará.';
 });
 frame.addEventListener('load', () => { if (busy) void stop(); });
 window.addEventListener('pagehide', () => { void stop(); });
@@ -386,25 +314,20 @@ window.addEventListener('pagehide', () => { void stop(); });
 async function generateStudentWithAI(record, signal, onProgress = () => {}) {
   const accepted = {};
   let inferenceFailed = false;
-  // A small model often stops after the first item in a list. Ask for one
-  // competency at a time and associate the reply with that exact competency.
+  // Preserve per-competency generation and progress. No identity, total,
+  // draft or free-text administration content is included in the prompt.
   for (let i = 0; i < record.competencias.length; i++) {
     signal.throwIfAborted();
     const competency = record.competencias[i];
     onProgress(i + 1, record.competencias.length, competency.competencia);
     const single = {id: record.id, competencias: [competency]};
     try {
-    const response = await wllama.createChatCompletion({
-      abortSignal: signal, cache_prompt: true,
-      messages: [
+    const response = await waitForProvider(puter.ai.chat([
         {role: 'system', content: 'Eres tutor de Formación Profesional. Responde en español con una sola acción práctica, sin introducción ni listas.'},
         {role: 'user', content: `Competencia: ${competency.competencia}. Nota: ${competency.valor}/10. Objetivo: ${getRubricMatch(competency.competencia, competency.valor).level <= 2 ? 'practicar con pautas y apoyos' : 'desarrollar mayor autonomía y nuevos retos'}. Escribe una sugerencia concreta de 12 a 20 palabras dirigida al estudiante. Devuelve solo la frase completa.`}
-      ],
-      max_tokens: 96, temperature: 0.5,
-      stop: ['\n\n\n', '<|im_end|>', '<|endoftext|>', '---']
-    });
+      ], {model: config.model, normalize: true, stream: false, max_tokens: 160, temperature: 0.5}), signal);
     signal.throwIfAborted();
-    const choice = response?.choices?.[0];
+    const choice = response;
     if (choice?.finish_reason === 'length') continue;
     const raw = String(choice?.message?.content || '').trim();
     const partInfo = {};
@@ -417,6 +340,7 @@ async function generateStudentWithAI(record, signal, onProgress = () => {}) {
     } catch {
       signal.throwIfAborted();
       inferenceFailed = true;
+      break; // Avoid repeating a failed authentication, quota or network request.
     }
   }
   signal.throwIfAborted();
@@ -437,18 +361,20 @@ window.addEventListener('message', async ({source, data}) => {
     const request = data.request;
     if (typeof request !== 'string') return;
     if (busy || stopping || loadingModel) { send({type: 'enhance-failure', request, code: 'busy'}); return; }
-    if (!aiLoaded || !wllama) {
+    if (!aiLoaded || !globalThis.puter?.auth.isSignedIn()) {
+      aiLoaded = false;
+      state(globalThis.puter ? 'Acceder a Puter' : 'Conectar con Puter');
       send({
         type: 'enhance-failure',
         request,
         code: 'not_connected',
-        detail: 'Carga el modelo IA primero pulsando el botón "Cargar IA Wllama" en la barra superior.'
+        detail: 'Conecta y accede a Puter desde la barra superior antes de solicitar sugerencias.'
       });
       return;
     }
     busy = true; active = request;
     const controller = new AbortController(); generationController = controller;
-    state('Mejorando seleccionados con IA…', true);
+    state('Generando sugerencias con Puter…', true);
     generationTask = (async () => {
       const records = Feedback.validateRecords(data.records);
       for (let i = 0; i < records.length; i++) {
@@ -481,7 +407,7 @@ window.addEventListener('message', async ({source, data}) => {
       generationTask = null;
       if (!stopping) {
         busy = false; active = null; generationController = null;
-        state(aiLoaded ? readyLabel() : 'Cargar IA Wllama (GPU/CPU auto)');
+        state(aiLoaded ? readyLabel() : 'Conectar con Puter');
       }
     }
     return;
@@ -496,8 +422,8 @@ window.addEventListener('message', async ({source, data}) => {
     const records = Feedback.validateRecords(data.records);
     if (records.length > 40) throw new Error('Lote demasiado grande');
     const result = [], provenance = {};
-    const wantsAI = data.model === 'qwen' || data.model === 'qwen-cpu';
-    const useAI = wantsAI && aiLoaded && Boolean(wllama);
+    const wantsAI = data.model === 'puter';
+    const useAI = wantsAI && aiLoaded && Boolean(globalThis.puter?.auth.isSignedIn());
     for (let i = 0; i < records.length; i++) {
       controller.signal.throwIfAborted();
       const record = records[i], started = performance.now();
@@ -524,8 +450,8 @@ window.addEventListener('message', async ({source, data}) => {
     generationTask = null;
     if (!stopping) {
       busy = false; active = null; generationController = null;
-      state(aiLoaded ? readyLabel() : 'Cargar IA Wllama (GPU/CPU auto)');
+      state(aiLoaded ? readyLabel() : 'Conectar con Puter');
     }
   }
 });
-state('Cargar IA Wllama (GPU/CPU auto)');
+state('Conectar con Puter');

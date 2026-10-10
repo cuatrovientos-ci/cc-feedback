@@ -37,9 +37,9 @@ app.secret_key = SECRET_KEY
 
 @app.after_request
 def add_security_headers(response):
-    # Cabeceras requeridas para multihilo en WebAssembly/Wllama en navegadores modernos
-    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
-    response.headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
+    # Puter authentication needs its cross-origin popup. The editor keeps its sandbox.
+    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin-allow-popups' if request.path in {'/', '/index.html'} else 'same-origin'
+    response.headers['Cross-Origin-Embedder-Policy'] = 'unsafe-none'
     # The sandboxed editor has an opaque origin. Only public assets may opt in.
     if request.endpoint in {'static_files', 'dynamic_rubricas_js'} and response.status_code < 400:
         response.headers['Cross-Origin-Resource-Policy'] = 'cross-origin'

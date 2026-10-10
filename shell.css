@@ -20,6 +20,7 @@ header {
   background-color: var(--primary-color);
   color: #ffffff;
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   align-items: center;
   box-shadow: 0 2px 8px rgba(15, 65, 132, 0.3);
@@ -31,7 +32,7 @@ header .small {
   color: #e2ecf9;
   font-size: 0.85rem;
   line-height: 1.4;
-  flex: 1;
+  flex: 1 1 300px;
 }
 
 header .small a {
@@ -44,7 +45,7 @@ header .small a:hover {
   color: #ffffff;
 }
 
-/* Botón principal Cargar modelo Wllama */
+/* Conexión y acceso a Puter */
 #connect {
   background-color: #ffffff;
   color: var(--primary-color);
@@ -83,7 +84,7 @@ header .small a:hover {
   cursor: not-allowed;
 }
 
-/* Botón secundario Descargar de memoria */
+/* Cancelación de la cola de sugerencias */
 #unload {
   background-color: transparent;
   color: #ffffff;
@@ -110,6 +111,7 @@ header .small a:hover {
 }
 
 #connection {
+  flex-basis: 100%;
   margin: 0;
   color: #842029;
   background-color: #fff1f2;
@@ -117,6 +119,12 @@ header .small a:hover {
   padding: 8px 14px;
   border-radius: 6px;
   font-size: 0.85rem;
+}
+
+#connection.alert-info {
+  color: #123f75;
+  background-color: #edf5ff;
+  border-color: #b8d4f4;
 }
 
 iframe {
@@ -141,4 +149,5 @@ iframe {
     width: 100%;
     justify-content: center;
   }
+  header .small, #connection { flex-basis: auto; }
 }
