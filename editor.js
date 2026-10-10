@@ -9,6 +9,7 @@ const form = document.getElementById('main-form'),
 let pendingInput = '', elapsedTimer, started = 0;
 let identities = new Map(), records = [], request = null, currentEnhanceRequest = null, last = Date.now(), timeout;
 const studentCards = new Map();
+let enhancementChanges = 0;
 
 function send(data) { parent.postMessage(data, '*'); }
 
@@ -39,6 +40,7 @@ function runEnhanceBatch(targetRecords) {
     return;
   }
   currentEnhanceRequest = crypto.randomUUID();
+  enhancementChanges = 0;
   setAiButtonsDisabled(true);
   const statusEl = document.getElementById('ai-batch-status');
   if (statusEl) {
@@ -199,7 +201,7 @@ window.addEventListener('message', event => {
     const statusEl = document.getElementById('ai-batch-status');
     if (statusEl) {
       statusEl.className = 'small mt-2 text-primary';
-      statusEl.textContent = `Generando con IA para alumno ${message.current} de ${message.total}... (~15 s por alumno)`;
+      statusEl.textContent = `Generando con IA para alumno ${message.current} de ${message.total}... El tiempo depende del equipo.`;
     }
     const cardObj = studentCards.get(message.id);
     if (cardObj) {
@@ -213,21 +215,42 @@ window.addEventListener('message', event => {
     if (message.request !== currentEnhanceRequest) return;
     const cardObj = studentCards.get(message.id);
     if (cardObj && message.studentResponse) {
-      const person = identities.get(message.id);
-      const resp = message.studentResponse;
-      let body = `Hola, ${person.name}:\n\n${resp.intro}\n\n`;
+      const record = records.find(r => r.id === message.id);
+      let resp;
+      try { resp = Feedback.response(JSON.stringify([message.studentResponse]), [record])[0]; }
+      catch { cardObj.methodBadge.textContent = 'Sin cambios: respuesta inválida'; return; }
+      const accepted = new Set(message.provenance?.aiCompetencies || []);
+      const changes = [];
       for (const c of resp.competencias_evaluadas) {
-        const val = person.values.find(v => v.competencia === c.nombre_competencia)?.valor ?? '';
-        body += `${c.nombre_competencia}\nCalificación: ${val}\nValoración: ${c.rubrica}\nSugerencia: ${c.recomendaciones}\n\n`;
+        const previous = cardObj.suggestions.get(c.nombre_competencia);
+        // Keep teacher edits and all unaffected parts of the draft intact.
+        const oldText = `Sugerencia: ${previous}\n\n`;
+        const sectionStart = cardObj.area.value.indexOf(`\n\n${c.nombre_competencia}\nCalificación:`);
+        const sectionEnd = sectionStart < 0 ? -1 : cardObj.area.value.indexOf('\n\n', sectionStart + 2);
+        const suggestionStart = sectionStart < 0 ? -1 : cardObj.area.value.indexOf(oldText, sectionStart);
+        if (accepted.has(c.nombre_competencia) && c.recomendaciones !== previous && suggestionStart >= 0 && suggestionStart < sectionEnd) {
+          cardObj.area.value = cardObj.area.value.slice(0, suggestionStart) + `Sugerencia: ${c.recomendaciones}\n\n` + cardObj.area.value.slice(suggestionStart + oldText.length);
+          cardObj.suggestions.set(c.nombre_competencia, c.recomendaciones);
+          cardObj.aiCompetencies.add(c.nombre_competencia);
+          changes.push(c.nombre_competencia);
+        }
       }
-      if (person.total !== null) body += `Nota final introducida por el docente: ${person.total}\n\n`;
-      body += `${resp.conclusion}\n\nAtentamente,\nEl Equipo Docente de Cuatrovientos.\n\nMétodo de elaboración: Con IA local ✨. Revisión docente requerida antes de su envío.`;
-
-      cardObj.area.value = body;
-      cardObj.methodBadge.textContent = 'Con IA local ✨';
-      cardObj.methodBadge.className = 'badge bg-success text-white border method-badge';
-      cardObj.check.checked = false;
-      cardObj.gmail.disabled = true;
+      enhancementChanges += changes.length;
+      if (changes.length) {
+        const method = cardObj.aiCompetencies.size === record.competencias.length ? 'Con IA local' : 'Mixto: IA local y reglas';
+        cardObj.area.value = cardObj.area.value.replace(/Método de elaboración: [^\n]+$/, `Método de elaboración: ${method}. Revisión docente requerida antes de su envío.`);
+        cardObj.methodBadge.textContent = `${changes.length} sugerencia(s) actualizada(s) con IA`;
+        cardObj.methodBadge.className = 'badge bg-success text-white border method-badge';
+        cardObj.changeNotice.textContent = `Sugerencias actualizadas: ${changes.join(', ')}. Las valoraciones de rúbrica no cambian.`;
+        cardObj.check.checked = false;
+        cardObj.gmail.disabled = true;
+      } else {
+        cardObj.methodBadge.textContent = 'Sin cambios en el borrador';
+        cardObj.methodBadge.className = 'badge bg-warning text-dark border method-badge';
+        cardObj.changeNotice.textContent = message.provenance?.reason === 'inference_failed'
+          ? 'La generación de IA falló. Se conserva el borrador anterior.'
+          : 'No se han aplicado sugerencias nuevas: la respuesta no era utilizable, coincidía con la anterior o el texto había sido editado. Se conserva el borrador.';
+      }
       cardObj.selectCheck.checked = false;
       updateSelectedCount();
     }
@@ -241,8 +264,10 @@ window.addEventListener('message', event => {
     updateSelectedCount();
     const statusEl = document.getElementById('ai-batch-status');
     if (statusEl) {
-      statusEl.className = 'small mt-2 text-success fw-bold';
-      statusEl.textContent = '✓ Mejora con IA completada para los alumnos seleccionados. Revisa los borradores.';
+      statusEl.className = `small mt-2 ${enhancementChanges ? 'text-success' : 'text-warning'} fw-bold`;
+      statusEl.textContent = enhancementChanges
+        ? `${enhancementChanges} sugerencia(s) actualizada(s). Revisa los borradores antes de abrir Gmail.`
+        : 'La IA no ha aportado cambios aplicables. Se conservan los borradores anteriores.';
     }
     return;
   }
@@ -377,10 +402,14 @@ window.addEventListener('message', event => {
       });
 
       details.append(label, area, review, gmail, node('p', 'Al abrir Gmail, el texto y el destinatario se incluyen en su URL y pasan a Google. Comprueba la cuenta institucional y revisa antes de enviar.', 'small mt-2'));
-      card.append(topBar, details);
+      const changeNotice = node('p', '', 'small mt-2 mb-2');
+      changeNotice.setAttribute('role', 'status');
+      card.append(topBar, changeNotice, details);
       list.append(card);
 
-      studentCards.set(response.id, { card, area, methodBadge, check, gmail, selectCheck, singleAiBtn, person });
+      studentCards.set(response.id, { card, area, methodBadge, check, gmail, selectCheck, singleAiBtn, person, changeNotice,
+        suggestions: new Map(response.competencias_evaluadas.map(c => [c.nombre_competencia, c.recomendaciones])),
+        aiCompetencies: new Set(info.aiCompetencies || []) });
     }
 
     request = null;

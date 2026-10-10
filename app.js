@@ -142,12 +142,10 @@ function isInvalidRecommendation(text) {
     t.includes('1-2 frases') ||
     t.includes('1 frase') ||
     t.includes('sugerencia práctica') ||
-    t.includes('sugerencia de mejora') ||
     t.includes('sugerencia formativa') ||
     t.includes('contextualización') ||
     t.includes('motivadora') ||
     t.includes('saludo') ||
-    t.includes('aquí') ||
     t.includes('...')
   ) {
     return true;
@@ -222,7 +220,7 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
     if (!trimmed) continue;
     const sepIdx = trimmed.indexOf(':') !== -1 ? trimmed.indexOf(':') : trimmed.indexOf('|');
     if (sepIdx > 0) {
-      const k = trimmed.slice(0, sepIdx).trim();
+      const k = trimmed.slice(0, sepIdx).replace(/[*_`]/g, '').trim();
       const v = trimmed.slice(sepIdx + 1).trim().replace(/^["']|["']$/g, '');
       if (k && v && v.length >= 10) {
         recMap.set(norm(k), v);
@@ -231,12 +229,14 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
   }
 
   let aiParts = 0, ruleParts = 0;
+  provenance.aiCompetencies = [];
   const fixedCompetencias = record.competencias.map(recComp => {
     const expectedNorm = norm(recComp.competencia);
     
     let recText = '';
+    const code = `c${record.competencias.indexOf(recComp) + 1}`;
     for (const [k, v] of recMap.entries()) {
-      if (k === expectedNorm || k.includes(expectedNorm) || expectedNorm.includes(k)) {
+      if (k === code || k === expectedNorm || (k.length > 3 && (k.includes(expectedNorm) || expectedNorm.includes(k)))) {
         recText = v;
         break;
       }
@@ -245,7 +245,7 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
     if (isInvalidRecommendation(recText)) {
       recText = getPedagogicalAdvice(recComp.competencia, recComp.valor);
       ruleParts++;
-    } else { aiParts++; }
+    } else { aiParts++; provenance.aiCompetencies.push(recComp.competencia); }
 
     // Match de rúbrica asignado 100% por programación de forma determinista
     const rubricText = getRubricDescriptor(recComp.competencia, recComp.valor);
@@ -260,6 +260,7 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
   const intro = globalThis.LOCAL_SETTINGS?.intro_text || 'A continuación se detalla la retroalimentación formativa de las competencias evaluadas en este periodo:';
   const conclusion = globalThis.LOCAL_SETTINGS?.conclusion_text || 'Revisa estas propuestas con tu docente y elige un objetivo concreto para el próximo proyecto.';
   provenance.method = aiParts ? (ruleParts ? 'mixed' : 'ai') : 'rules';
+  if (ruleParts && !provenance.reason) provenance.reason = 'incomplete';
 
   return [{
     id: record.id,
@@ -270,21 +271,15 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
 }
 
 function buildSuggestionPrompt(record) {
-  const compLines = record.competencias.map(c => {
+  const compLines = record.competencias.map((c, i) => {
     const match = getRubricMatch(c.competencia, c.valor);
     const focus = match.level <= 2 ? 'acordar pautas y apoyos' : (match.level === 3 ? 'mayor iniciativa y autonomía' : 'liderazgo y reto de ampliación');
-    return `- ${c.competencia} (${c.valor}/10, Nivel ${match.level}): objetivo ${focus}`;
+    return `C${i + 1}: ${c.competencia}, ${c.valor}/10. Objetivo: ${focus}.`;
   }).join('\n');
 
-  return `Como docente de Formación Profesional en Cuatrovientos, redacta un consejo de mejora pedagógico, constructivo y motivador de 1 frase (12 a 16 palabras) para cada competencia:
+  return `Escribe en español una acción concreta de mejora por competencia, en 12 a 16 palabras.
 ${compLines}
-
-Ejemplos de estilo:
-- Acuerda con tu equipo una tarea semanal con plazo y revisad juntos su entrega.
-- Contrasta dos herramientas digitales antes de decidir y compara sus ventajas en el trabajo.
-
-Escribe directamente una línea por competencia (sin texto introductorio):
-${record.competencias.map(c => `${c.competencia}: `).join('\n')}`;
+Devuelve solo líneas con el código y el consejo: C1: consejo. No repitas el objetivo ni incluyas introducción.`;
 }
 
 async function modelBlob(signal) {
@@ -352,11 +347,11 @@ button.addEventListener('click', async () => {
     state('Preparando modelo en memoria…', true);
     const numThreads = navigator.hardwareConcurrency || 4;
     try {
-      await engine.loadModel([blob], {n_ctx: 512, n_threads: numThreads, n_gpu_layers: loadedMode === 'gpu' ? 99999 : 0});
+      await engine.loadModel([blob], {n_ctx: 2048, n_threads: numThreads, n_gpu_layers: loadedMode === 'gpu' ? 99999 : 0});
     } catch (err) {
       if (loadedMode === 'gpu' && !controller.signal.aborted) {
         loadedMode = 'cpu';
-        await engine.loadModel([blob], {n_ctx: 512, n_threads: numThreads, n_gpu_layers: 0});
+        await engine.loadModel([blob], {n_ctx: 2048, n_threads: numThreads, n_gpu_layers: 0});
       } else {
         throw err;
       }
@@ -410,7 +405,7 @@ async function generateStudentWithAI(record, signal) {
         {role: 'system', content: 'Eres tutor docente de Formación Profesional en Cuatrovientos. Redactas propuestas formativas prácticas, constructivas y motivadoras en formato de una línea por competencia sin introducciones.'},
         {role: 'user', content: buildSuggestionPrompt(record)}
       ],
-      max_tokens: 115, temperature: 0.35,
+      max_tokens: Math.min(768, record.competencias.length * 64), temperature: 0.35,
       stop: ['\n\n\n', '<|im_end|>', '<|endoftext|>', '---']
     });
     raw = response?.choices?.[0]?.message?.content || '';
@@ -507,7 +502,7 @@ window.addEventListener('message', async ({source, data}) => {
           const response = await wllama.createChatCompletion({
             abortSignal: controller.signal, cache_prompt: true,
             messages:[{role:'system', content:'Eres tutor docente de Formación Profesional en Cuatrovientos. Redactas propuestas formativas prácticas, constructivas y motivadoras en formato de una línea por competencia sin introducciones.'}, {role:'user', content:buildSuggestionPrompt(record)}],
-            max_tokens: 115, temperature:0.35,
+            max_tokens: Math.min(768, record.competencias.length * 64), temperature:0.35,
             stop: ['\n\n\n', '<|im_end|>', '<|endoftext|>', '---']
           });
           raw = response?.choices?.[0]?.message?.content || '';
