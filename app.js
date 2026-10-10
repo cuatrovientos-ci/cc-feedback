@@ -256,12 +256,20 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
 }
 
 function buildSuggestionPrompt(record) {
-  const compLines = record.competencias.map(c => `- ${c.competencia}: ${c.valor}/10`).join('\n');
+  const compLines = record.competencias.map(c => {
+    const match = getRubricMatch(c.competencia, c.valor);
+    const focus = match.level <= 2 ? 'acordar pautas y apoyos' : (match.level === 3 ? 'mayor iniciativa y autonomía' : 'liderazgo y reto de ampliación');
+    return `- ${c.competencia} (${c.valor}/10, Nivel ${match.level}): objetivo ${focus}`;
+  }).join('\n');
 
-  return `Eres docente en Cuatrovientos. Escribe un consejo de mejora de 1 sola frase corta (máximo 8 palabras) para cada competencia empezando con un verbo de acción:
+  return `Como docente de Formación Profesional en Cuatrovientos, redacta un consejo de mejora pedagógico, constructivo y motivador de 1 frase (12 a 16 palabras) para cada competencia:
 ${compLines}
 
-Escribe directamente una línea por competencia (sin introducciones ni despedidas):
+Ejemplos de estilo:
+- Acuerda con tu equipo una tarea semanal con plazo y revisad juntos su entrega.
+- Contrasta dos herramientas digitales antes de decidir y compara sus ventajas en el trabajo.
+
+Escribe directamente una línea por competencia (sin texto introductorio):
 ${record.competencias.map(c => `${c.competencia}: `).join('\n')}`;
 }
 
@@ -410,8 +418,8 @@ window.addEventListener('message', async ({source, data}) => {
         try {
           const response = await wllama.createChatCompletion({
             abortSignal: controller.signal, cache_prompt: true,
-            messages:[{role:'system', content:'Eres tutor docente en Cuatrovientos. Redactas consejos de mejora ultra-breves (máximo 8 palabras por frase) en formato de una línea por competencia sin introducciones.'}, {role:'user', content:buildSuggestionPrompt(record)}],
-            max_tokens: 85, temperature:0.3,
+            messages:[{role:'system', content:'Eres tutor docente de Formación Profesional en Cuatrovientos. Redactas propuestas formativas prácticas, constructivas y motivadoras en formato de una línea por competencia sin introducciones.'}, {role:'user', content:buildSuggestionPrompt(record)}],
+            max_tokens: 115, temperature:0.35,
             stop: ['\n\n\n', '<|im_end|>', '<|endoftext|>', '---']
           });
           raw = response?.choices?.[0]?.message?.content || '';
