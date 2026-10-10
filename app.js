@@ -80,8 +80,40 @@ async function clearStorageQuota() {
   if ((await caches.keys()).includes(config.cache)) throw new Error('No se pudo verificar el borrado.');
 }
 
+function getRubricMatch(compName, score) {
+  const rubrics = globalThis.LOCAL_RUBRICS || [];
+  const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const target = norm(compName);
+
+  let found = rubrics.find(r => norm(r.name) === target);
+  if (!found) {
+    if (target.includes('innova')) found = rubrics.find(r => norm(r.name).includes('innovacion'));
+    else if (target.includes('emprend')) found = rubrics.find(r => norm(r.name).includes('emprendimiento'));
+    else if (target.includes('comunica')) found = rubrics.find(r => norm(r.name).includes('comunicacion oral'));
+    else if (target.includes('equipo')) found = rubrics.find(r => norm(r.name).includes('equipo'));
+    else if (target.includes('digital')) found = rubrics.find(r => norm(r.name).includes('digital'));
+    else if (target.includes('entorno') || target.includes('adaptaci')) found = rubrics.find(r => norm(r.name).includes('entorno'));
+    else if (target.includes('autonom')) found = rubrics.find(r => norm(r.name).includes('autonomia'));
+    else if (target.includes('responsa')) found = rubrics.find(r => norm(r.name).includes('responsabilidad'));
+  }
+
+  const val = Number(score) || 0;
+  let level = 1;
+  if (val >= 8.5) level = 4;
+  else if (val >= 7.0) level = 3;
+  else if (val >= 5.0) level = 2;
+  else level = 1;
+
+  const levelIdx = level - 1;
+  const descriptor = (found && Array.isArray(found.levels) && found.levels[levelIdx])
+    ? found.levels[levelIdx]
+    : `Nivel ${level}: Desempeño observado en ${compName} con calificación ${score}/10.`;
+
+  return { level, descriptor };
+}
+
 function getRubricDescriptor(compName, score) {
-  return `Calificación registrada: ${score}/10. La nota no asigna por sí sola un nivel de rúbrica ni acredita conductas concretas.`;
+  return getRubricMatch(compName, score).descriptor;
 }
 
 function getPedagogicalAdvice(compName, score) {
@@ -149,16 +181,20 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
   const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
   const recMap = new Map();
+  // Formato directo: { "Competencia": "Sugerencia..." }
+  for (const [k, v] of Object.entries(parsed)) {
+    if (typeof v === 'string' && v.trim()) recMap.set(norm(k), v.trim());
+  }
+  // Formato anidado: { recomendaciones: { "Competencia": "Sugerencia..." } }
   if (parsed.recomendaciones && typeof parsed.recomendaciones === 'object' && !Array.isArray(parsed.recomendaciones)) {
     for (const [k, v] of Object.entries(parsed.recomendaciones)) {
-      if (v) recMap.set(norm(k), String(v).trim());
+      if (typeof v === 'string' && v.trim()) recMap.set(norm(k), v.trim());
     }
   }
-
+  // Formato array: { competencias_evaluadas: [ { nombre_competencia, recomendaciones } ] }
   const rawComps = Array.isArray(parsed.competencias_evaluadas)
     ? parsed.competencias_evaluadas
     : (Array.isArray(parsed.competencias) ? parsed.competencias : []);
-
   for (const c of rawComps) {
     const key = norm(c?.nombre_competencia || c?.competencia || c?.nombre || '');
     const val = c?.recomendaciones || c?.recomendacion || c?.sugerencias || c?.sugerencia || '';
@@ -171,7 +207,7 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
     
     let recText = '';
     for (const [k, v] of recMap.entries()) {
-      if (k === expectedNorm) {
+      if (k === expectedNorm || k.includes(expectedNorm) || expectedNorm.includes(k)) {
         recText = v;
         break;
       }
@@ -182,6 +218,7 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
       ruleParts++;
     } else { aiParts++; }
 
+    // Match de rúbrica asignado 100% por programación de forma determinista
     const rubricText = getRubricDescriptor(recComp.competencia, recComp.valor);
 
     return {
@@ -191,40 +228,31 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
     };
   });
 
-  let intro = String(parsed.intro || parsed.introduccion || '').trim();
-  if (isInvalidRecommendation(intro) || intro.length < 15) {
-    ruleParts++;
-    intro = 'A continuación se detalla la retroalimentación formativa de las competencias evaluadas en este periodo:';
-  } else { aiParts++; }
-
-  let conclusion = String(parsed.conclusion || parsed.conclusiones || parsed.cierre || '').trim();
-  if (isInvalidRecommendation(conclusion) || conclusion.length < 15) {
-    ruleParts++;
-    conclusion = 'Revisa estas propuestas con tu docente y elige un objetivo concreto para el próximo proyecto.';
-  } else { aiParts++; }
+  const intro = 'A continuación se detalla la retroalimentación formativa de las competencias evaluadas en este periodo:';
+  const conclusion = 'Revisa estas propuestas con tu docente y elige un objetivo concreto para el próximo proyecto.';
   provenance.method = aiParts ? (ruleParts ? 'mixed' : 'ai') : 'rules';
 
   return [{
     id: record.id,
-    intro: intro.slice(0, 3000),
+    intro,
     competencias_evaluadas: fixedCompetencias,
-    conclusion: conclusion.slice(0, 3000)
+    conclusion
   }];
 }
 
-function buildCompactPrompt(record) {
-  const compLines = record.competencias.map(c => `- ${c.competencia}: ${c.valor}/10`).join('\n');
+function buildSuggestionPrompt(record) {
+  const compLines = record.competencias.map(c => {
+    const match = getRubricMatch(c.competencia, c.valor);
+    return `- ${c.competencia} (Nivel ${match.level}): ${match.descriptor}`;
+  }).join('\n');
+
   return `Eres docente en el Centro Integrado Cuatrovientos.
-Propón acciones concretas de mejora. No afirmes hábitos, personalidad, diagnósticos ni conductas observadas: solo dispones de notas. No asignes niveles de rúbrica.\nEscribe una recomendación pedagógica breve y constructiva para este alumno según sus notas en competencias (escala 0 a 10):
+Para cada competencia y descriptor observado de la rúbrica, redacta una sugerencia formativa práctica y motivadora de mejora (1 sola frase concreta por competencia):
 ${compLines}
 
-Responde ÚNICAMENTE en JSON válido con este formato:
+Responde ÚNICAMENTE con un objeto JSON asociando cada competencia a su sugerencia de mejora:
 {
-  "intro": "saludo cordial y breve contexto",
-  "recomendaciones": {
-${record.competencias.map(c => `    "${c.competencia}": "tu consejo concreto para ${c.competencia}"`).join(',\n')}
-  },
-  "conclusion": "cierre motivador para el alumno"
+${record.competencias.map(c => `  "${c.competencia}": "sugerencia práctica de 1 frase"`).join(',\n')}
 }`;
 }
 
@@ -348,8 +376,8 @@ window.addEventListener('message', async ({source, data}) => {
         try {
           const response = await wllama.createChatCompletion({
             abortSignal: controller.signal, cache_prompt: false,
-            messages:[{role:'system', content:'Propón actividades formativas, sin inventar observaciones sobre el alumno. Responde en JSON.'}, {role:'user', content:buildCompactPrompt(record)}],
-            max_tokens: Math.min(1000, 160 + record.competencias.length * 90), temperature:0.2,
+            messages:[{role:'system', content:'Propón sugerencias formativas prácticas de mejora en formato JSON.'}, {role:'user', content:buildSuggestionPrompt(record)}],
+            max_tokens: Math.min(350, 60 + record.competencias.length * 40), temperature:0.2,
             response_format: {type:'json_object'}
           });
           raw = response?.choices?.[0]?.message?.content || '';
@@ -391,8 +419,8 @@ benchmark.addEventListener('click', async () => {
     const record = Feedback.prepare(Feedback.parseStudents('5 6 4 7 5 6')).records[0];
     const response = await wllama.createChatCompletion({
       abortSignal:controller.signal, cache_prompt:false,
-      messages:[{role:'system',content:'Propón actividades formativas, sin inventar observaciones sobre el alumno. Responde en JSON.'},{role:'user',content:buildCompactPrompt(record)}],
-      max_tokens:Math.min(1000,160+record.competencias.length*90), temperature:0.2, response_format:{type:'json_object'}
+      messages:[{role:'system',content:'Propón sugerencias formativas prácticas de mejora en formato JSON.'},{role:'user',content:buildSuggestionPrompt(record)}],
+      max_tokens:Math.min(350, 60 + record.competencias.length * 40), temperature:0.2, response_format:{type:'json_object'}
     });
     controller.signal.throwIfAborted();
     const info = {};
