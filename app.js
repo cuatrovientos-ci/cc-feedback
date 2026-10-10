@@ -105,6 +105,20 @@ function getRubricDescriptor(compName, score) {
 
 function getPedagogicalAdvice(compName, score) {
   const c = compName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const customAdvice = globalThis.LOCAL_ADVICE;
+  const suffix = globalThis.LOCAL_SETTINGS?.advice_suffix || 'Ajusta la dificultad y los apoyos con tu docente según las evidencias de aprendizaje.';
+  
+  if (Array.isArray(customAdvice) && customAdvice.length > 0) {
+    for (const item of customAdvice) {
+      try {
+        const regex = new RegExp(item.pattern, 'i');
+        if (regex.test(c)) {
+          return `${item.advice} ${suffix}`.trim();
+        }
+      } catch {}
+    }
+  }
+
   const exercises = [
     [/innova|emprend/, 'Propón dos soluciones a un problema del proyecto y compara sus ventajas antes de elegir una.'],
     [/equipo/, 'Acuerda con el equipo una tarea, un plazo y una forma de revisar juntos su cumplimiento.'],
@@ -115,7 +129,7 @@ function getPedagogicalAdvice(compName, score) {
   ];
   const action = exercises.find(([pattern]) => pattern.test(c))?.[1]
     || `Elige con tu docente una actividad de ${compName} y acuerda cómo comprobar el progreso.`;
-  return `${action} Ajusta la dificultad y los apoyos con tu docente según las evidencias de aprendizaje.`;
+  return `${action} ${suffix}`.trim();
 }
 
 function isInvalidRecommendation(text) {
@@ -243,8 +257,8 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
     };
   });
 
-  const intro = 'A continuación se detalla la retroalimentación formativa de las competencias evaluadas en este periodo:';
-  const conclusion = 'Revisa estas propuestas con tu docente y elige un objetivo concreto para el próximo proyecto.';
+  const intro = globalThis.LOCAL_SETTINGS?.intro_text || 'A continuación se detalla la retroalimentación formativa de las competencias evaluadas en este periodo:';
+  const conclusion = globalThis.LOCAL_SETTINGS?.conclusion_text || 'Revisa estas propuestas con tu docente y elige un objetivo concreto para el próximo proyecto.';
   provenance.method = aiParts ? (ruleParts ? 'mixed' : 'ai') : 'rules';
 
   return [{

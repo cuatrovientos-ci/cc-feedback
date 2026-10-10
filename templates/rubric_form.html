@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar Rúbrica' if rubric else 'Nueva Rúbrica' }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h4 class="fw-bold mb-0 text-primary">{{ 'Editar Rúbrica: ' + rubric.name if rubric else 'Nueva Rúbrica' }}</h4>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="name" class="form-label fw-semibold">Nombre de la Competencia:</label>
+                        <input type="text" class="form-control" id="name" name="name" value="{{ rubric.name if rubric else '' }}" required placeholder="Ej: Trabajo en equipo">
+                        <div class="form-text">Debe coincidir con el nombre o palabra clave de la columna introducida por el docente.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="display_order" class="form-label fw-semibold">Orden de visualización:</label>
+                        <input type="number" class="form-control" id="display_order" name="display_order" value="{{ rubric.display_order if rubric else 0 }}" style="max-width: 120px;">
+                    </div>
+
+                    <hr class="my-4">
+                    <h5 class="fw-bold mb-3">Descriptores por Niveles de Desempeño:</h5>
+
+                    <div class="mb-3">
+                        <label for="level1" class="form-label fw-semibold text-danger">Nivel 1 (Insuficiente: Calificación 0 a 4.9):</label>
+                        <textarea class="form-control" id="level1" name="level1" rows="3" required>{{ rubric.level1 if rubric else '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="level2" class="form-label fw-semibold text-warning text-dark">Nivel 2 (Suficiente / Bien: Calificación 5.0 a 6.9):</label>
+                        <textarea class="form-control" id="level2" name="level2" rows="3" required>{{ rubric.level2 if rubric else '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="level3" class="form-label fw-semibold text-primary">Nivel 3 (Notable: Calificación 7.0 a 8.4):</label>
+                        <textarea class="form-control" id="level3" name="level3" rows="3" required>{{ rubric.level3 if rubric else '' }}</textarea>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="level4" class="form-label fw-semibold text-success">Nivel 4 (Sobresaliente / Excelente: Calificación 8.5 a 10):</label>
+                        <textarea class="form-control" id="level4" name="level4" rows="3" required>{{ rubric.level4 if rubric else '' }}</textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="/admin/rubrics" class="btn btn-outline-secondary">Cancelar</a>
+                        <button type="submit" class="btn btn-cv px-4">Guardar Rúbrica</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

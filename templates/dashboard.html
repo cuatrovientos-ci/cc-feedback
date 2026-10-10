@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Panel de Control{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1">Panel de Control Pedagógico</h2>
+        <p class="text-muted mb-0">Gestiona las rúbricas oficiales y consejos pedagógicos almacenados en SQLite.</p>
+    </div>
+    <form method="POST" action="/admin/sync-file" class="d-inline">
+        <button type="submit" class="btn btn-outline-primary btn-sm">💾 Sincronizar archivo rubricas.js</button>
+    </form>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title fw-bold text-primary mb-0">📋 Rúbricas Oficiales</h5>
+                    <span class="badge bg-primary fs-6">{{ rubrics_count }}</span>
+                </div>
+                <p class="card-text text-muted small">Criterios de evaluación por niveles (1 al 4) para cada competencia clave.</p>
+                <div class="mt-3">
+                    <a href="/admin/rubrics" class="btn btn-cv btn-sm me-2">Ver rúbricas</a>
+                    <a href="/admin/rubrics/new" class="btn btn-outline-secondary btn-sm">+ Nueva rúbrica</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title fw-bold text-success mb-0">💡 Consejos Pedagógicos</h5>
+                    <span class="badge bg-success fs-6">{{ recommendations_count }}</span>
+                </div>
+                <p class="card-text text-muted small">Propuestas de mejora prácticas asignadas según la competencia evaluada.</p>
+                <div class="mt-3">
+                    <a href="/admin/recommendations" class="btn btn-success btn-sm me-2">Ver consejos</a>
+                    <a href="/admin/recommendations/new" class="btn btn-outline-secondary btn-sm">+ Nuevo consejo</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title fw-bold text-secondary mb-0">⚙️ Textos Globales</h5>
+                    <span class="badge bg-secondary fs-6">Configurado</span>
+                </div>
+                <p class="card-text text-muted small">Encabezados, conclusiones y notas complementarias de los informes.</p>
+                <div class="mt-3">
+                    <a href="/admin/settings" class="btn btn-secondary btn-sm">Editar textos</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white py-3">
+        <h5 class="fw-bold mb-0">Información del Sistema</h5>
+    </div>
+    <div class="card-body">
+        <ul class="list-group list-group-flush small">
+            <li class="list-group-item d-flex justify-content-between">
+                <span class="text-muted">Base de datos SQLite:</span>
+                <span class="fw-mono"><code>{{ db_path }}</code></span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <span class="text-muted">Sesión actual:</span>
+                <span class="d-flex align-items-center gap-2">
+                    {% if admin_picture %}
+                    <img src="{{ admin_picture }}" alt="Avatar" class="rounded-circle" width="24" height="24">
+                    {% endif %}
+                    <span class="fw-bold">{{ admin_name }} ({{ admin_user }})</span>
+                    <span class="badge bg-danger">Google @cuatrovientos.org</span>
+                </span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span class="text-muted">Cabeceras COOP/COEP:</span>
+                <span class="badge bg-success">Activas (Habilita multihilo en Wllama)</span>
+            </li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

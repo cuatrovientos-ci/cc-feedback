@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Acceso de Administrador con Google{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-7 col-lg-6">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4 p-md-5 text-center">
+                <img src="/assets/cuatrovientos.png" alt="Cuatrovientos" height="56" class="mb-3">
+                <h3 class="card-title fw-bold text-primary mb-2">Panel de Administración</h3>
+                <p class="text-muted small mb-4">Acceso mediante cuenta de Google corporativa con dominio <strong>@{{ allowed_domain }}</strong>.</p>
+
+                <!-- Botón de Inicio de Sesión Oficial con Google -->
+                <div class="d-grid gap-2 mb-4">
+                    <a href="/admin/login/google" class="btn btn-light py-3 px-4 d-flex align-items-center justify-content-center gap-3 border shadow-sm btn-lg text-decoration-none">
+                        <!-- Logo Google SVG -->
+                        <svg width="24" height="24" viewBox="0 0 48 48">
+                            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.55 10.79l7.98-6.2z"/>
+                            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                        </svg>
+                        <span class="fw-bold text-dark fs-6">Acceder con Google (@{{ allowed_domain }})</span>
+                    </a>
+                </div>
+
+                <div class="alert alert-primary py-2 px-3 small text-start mb-4">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="fs-5">🔒</span>
+                        <strong>Verificación de Seguridad Cuatrovientos:</strong>
+                    </div>
+                    <ul class="mb-0 ps-3">
+                        <li>Solo se admiten cuentas verificadas que terminen en <code>@{{ allowed_domain }}</code>.</li>
+                        {% if admin_users and '*' not in admin_users %}
+                        <li>Solo las cuentas autorizadas en el archivo <code>.env</code> (<code>ADMIN_USER</code>) tienen permisos de acceso:
+                            <span class="fw-bold">{{ admin_users|join(', ') }}</span>
+                        </li>
+                        {% else %}
+                        <li>Cualquier docente con cuenta corporativa activa puede administrar.</li>
+                        {% endif %}
+                    </ul>
+                </div>
+
+                {% if not google_configured %}
+                <div class="card bg-light border-warning text-start p-3 mt-3">
+                    <h6 class="fw-bold text-warning-emphasis mb-2">⚙️ Configuración requerida de Google Cloud Console:</h6>
+                    <p class="small text-muted mb-2">Para conectar con Gmail / Google Workspace de Cuatrovientos, crea un proyecto en <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a> y añade este URI de redirección autorizado:</p>
+                    <div class="input-group input-group-sm mb-2">
+                        <input type="text" class="form-control font-monospace" value="{{ redirect_uri }}" readonly>
+                    </div>
+                    <p class="small text-muted mb-0">Copia el <strong>ID de cliente</strong> y el <strong>Secreto de cliente</strong> a tu archivo <code>.env</code>:</p>
+                    <pre class="bg-dark text-white p-2 rounded small mt-1 mb-0"><code>GOOGLE_CLIENT_ID=tu_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=tu_secreto</code></pre>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

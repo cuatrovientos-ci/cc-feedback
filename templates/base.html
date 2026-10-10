@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Panel de Administración{% endblock %} - Centro Integrado Cuatrovientos</title>
+    <link rel="stylesheet" href="/assets/bootstrap.min.css">
+    <style>
+        :root {
+            --cv-primary: #0f4184;
+            --cv-dark: #0a2c59;
+        }
+        .navbar-cv {
+            background-color: var(--cv-primary);
+        }
+        .btn-cv {
+            background-color: var(--cv-primary);
+            color: white;
+            border: none;
+        }
+        .btn-cv:hover {
+            background-color: var(--cv-dark);
+            color: white;
+        }
+        .nav-link.active {
+            font-weight: bold;
+            text-decoration: underline;
+        }
+        .level-badge {
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="bg-light min-vh-100 d-flex flex-column">
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-cv shadow-sm">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="/admin">
+                <img src="/assets/cuatrovientos.png" alt="Cuatrovientos" height="32" class="bg-white rounded p-1">
+                <span class="fw-bold">Administración Rúbricas e IA</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#adminNavbar">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="adminNavbar">
+                {% if session.get('logged_in') %}
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="/admin">📊 Panel</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if active_page == 'rubrics' %}active{% endif %}" href="/admin/rubrics">📋 Rúbricas</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if active_page == 'recommendations' %}active{% endif %}" href="/admin/recommendations">💡 Recomendaciones</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if active_page == 'settings' %}active{% endif %}" href="/admin/settings">⚙️ Ajustes Textos</a>
+                    </li>
+                </ul>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="/" target="_blank" class="btn btn-outline-light btn-sm">🚀 Abrir App</a>
+                    <a href="/admin/logout" class="btn btn-danger btn-sm">Cerrar Sesión</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <main class="container my-4 flex-grow-1">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show shadow-sm" role="alert">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-white border-top py-3 text-center text-muted small mt-auto">
+        <div class="container">
+            Centro Integrado Cuatrovientos &middot; Herramienta de Retroalimentación de Competencias Clave &middot; SQLite & Flask
+        </div>
+    </footer>
+</body>
+</html>

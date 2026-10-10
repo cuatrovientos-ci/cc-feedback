@@ -1,5 +1,5 @@
 'use strict';
-// Textos de prompt.toon, sin convertir notas ni inferir niveles.
+// Generado automáticamente desde SQLite (feedback.db)
 const RUBRICS = [
   {
     "name": "Innovación",
@@ -77,12 +77,52 @@ const RUBRICS = [
     "name": "Responsabilidad",
     "levels": [
       "No respeta las normas establecidas. Incumple compromisos. En caso de no poder cumplir con su compromiso, no da las explicaciones pertinentes. No asume las consecuencias de sus decisiones y acciones. No reconoce sus errores.",
-      "No suele respetar las normas establecidas. Le cuesta cumplir sus compromisos. En caso de no poder cumplir con su compromiso, no da las explicaciones pertinentes. Raramente asume las consecuencias de sus decisiones y acciones. Reconoce errores solo cuando se le señala.",
+      "No suele respetar las normas establecidas. Le cuesta cumplir sus compromisos. En caso de no poder cumplir con su compromiso, da las explicaciones pertinentes. Raramente asume las consecuencias de sus decisiones y acciones. Reconoce errores solo cuando se le señala.",
       "Normalmente cumple con las normas establecidas. Cumple la mayoría de sus compromisos, dentro del tiempo acordado. En caso de no poder cumplir con su compromiso, da las explicaciones pertinentes, aunque no siempre en tiempo y forma. Asume, con alguna dificultad, las consecuencias de sus decisiones y acciones. Si se equivoca, suele reconocerlo y actúa para corregirlo, en lugar de esconderse o echar la culpa a otras personas.",
       "Cumple con las normas establecidas. Hace lo que se ha comprometido a hacer, dentro del tiempo acordado. En caso de no poder cumplir con su compromiso, da las explicaciones pertinentes en tiempo y forma. Asume las consecuencias de todas sus decisiones y acciones. Si se equivoca, lo reconoce y actúa para corregirlo, en lugar de esconderse o echar la culpa a otras personas."
     ]
   }
 ];
+const ADVICE = [
+  {
+    "pattern": "innova|emprend",
+    "label": "Innovación y Emprendimiento",
+    "advice": "Propón dos soluciones a un problema del proyecto y compara sus ventajas antes de elegir una."
+  },
+  {
+    "pattern": "equipo",
+    "label": "Trabajo en equipo",
+    "advice": "Acuerda con el equipo una tarea, un plazo y una forma de revisar juntos su cumplimiento."
+  },
+  {
+    "pattern": "comunica",
+    "label": "Capacidad comunicativa (oral/escrita)",
+    "advice": "Prepara una exposición con introducción, dos ideas principales y cierre; solicita una sugerencia de mejora."
+  },
+  {
+    "pattern": "digital",
+    "label": "Competencia digital",
+    "advice": "Contrasta una fuente digital y comprueba el resultado de una herramienta antes de incorporarlo al trabajo."
+  },
+  {
+    "pattern": "entorno|adaptaci",
+    "label": "Adaptación al entorno",
+    "advice": "Ante un cambio del proyecto, anota dos alternativas y explica cómo adaptarías tu planificación."
+  },
+  {
+    "pattern": "autonom|responsa",
+    "label": "Autonomía y responsabilidad",
+    "advice": "Planifica las entregas con una lista semanal y reserva un momento para revisar tus avances."
+  }
+];
+const SETTINGS = {
+  "intro_text": "A continuación se detalla la retroalimentación formativa de las competencias evaluadas en este periodo:",
+  "conclusion_text": "Revisa estas propuestas con tu docente y elige un objetivo concreto para el próximo proyecto.",
+  "advice_suffix": "Ajusta la dificultad y los apoyos con tu docente según las evidencias de aprendizaje."
+};
+
 if (typeof module !== 'undefined' && module.exports) module.exports = RUBRICS;
 
 globalThis.LOCAL_RUBRICS = RUBRICS;
+globalThis.LOCAL_ADVICE = ADVICE;
+globalThis.LOCAL_SETTINGS = SETTINGS;

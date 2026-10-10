@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Ajustes de Textos Globales{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h4 class="fw-bold mb-0 text-secondary">Ajustes de Textos Globales</h4>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="intro_text" class="form-label fw-semibold">Texto de Introducción del Informe:</label>
+                        <textarea class="form-control" id="intro_text" name="intro_text" rows="2" required>{{ settings.intro_text }}</textarea>
+                        <div class="form-text">Frase introductoria que aparece tras el saludo ("Hola, Alumno:").</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="conclusion_text" class="form-label fw-semibold">Texto de Conclusión del Informe:</label>
+                        <textarea class="form-control" id="conclusion_text" name="conclusion_text" rows="2" required>{{ settings.conclusion_text }}</textarea>
+                        <div class="form-text">Frase de cierre que precede a la firma institucional.</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="advice_suffix" class="form-label fw-semibold">Sufijo pedagógico añadido a las sugerencias por reglas:</label>
+                        <textarea class="form-control" id="advice_suffix" name="advice_suffix" rows="2" required>{{ settings.advice_suffix }}</textarea>
+                        <div class="form-text">Frase complementaria de acompañamiento docente añadida a los consejos automáticos.</div>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="/admin" class="btn btn-outline-secondary">Volver al panel</a>
+                        <button type="submit" class="btn btn-primary px-4">Guardar Textos</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

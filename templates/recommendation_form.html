@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar Consejo' if rec else 'Nuevo Consejo' }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h4 class="fw-bold mb-0 text-success">{{ 'Editar Consejo: ' + rec.label if rec else 'Nuevo Consejo Pedagógico' }}</h4>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="label" class="form-label fw-semibold">Etiqueta descriptiva:</label>
+                        <input type="text" class="form-control" id="label" name="label" value="{{ rec.label if rec else '' }}" required placeholder="Ej: Trabajo en equipo">
+                        <div class="form-text">Nombre legible para identificar la competencia.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="pattern" class="form-label fw-semibold">Patrón de búsqueda (expresión regular / palabra clave):</label>
+                        <input type="text" class="form-control" id="pattern" name="pattern" value="{{ rec.pattern if rec else '' }}" required placeholder="Ej: equipo|colabora">
+                        <div class="form-text">Palabra clave o regex que detecta esta competencia en la cabecera del Excel (ej: <code>equipo</code> o <code>innova|emprend</code>).</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="advice" class="form-label fw-semibold">Consejo formativo / propuesta de mejora:</label>
+                        <textarea class="form-control" id="advice" name="advice" rows="3" required placeholder="Ej: Acuerda con el equipo una tarea, un plazo y una forma de revisar juntos su cumplimiento.">{{ rec.advice if rec else '' }}</textarea>
+                        <div class="form-text">Propuesta de acción concreta de 1 frase dirigida al alumno.</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="display_order" class="form-label fw-semibold">Orden de visualización:</label>
+                        <input type="number" class="form-control" id="display_order" name="display_order" value="{{ rec.display_order if rec else 0 }}" style="max-width: 120px;">
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="/admin/recommendations" class="btn btn-outline-secondary">Cancelar</a>
+                        <button type="submit" class="btn btn-success px-4">Guardar Consejo</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Rúbricas{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1">Rúbricas Oficiales</h2>
+        <p class="text-muted mb-0">Criterios de evaluación y descriptores por nivel para cada competencia.</p>
+    </div>
+    <a href="/admin/rubrics/new" class="btn btn-cv btn-sm">+ Nueva Rúbrica</a>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 50px;">#</th>
+                    <th style="width: 200px;">Competencia</th>
+                    <th>Descriptores por Nivel (1 al 4)</th>
+                    <th style="width: 140px;" class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rubrics %}
+                <tr>
+                    <td class="text-muted">{{ loop.index }}</td>
+                    <td class="fw-bold text-primary">{{ r.name }}</td>
+                    <td>
+                        <details class="mb-0">
+                            <summary class="text-secondary small cursor-pointer">Ver descriptores (4 niveles)</summary>
+                            <div class="mt-2 small">
+                                <div class="mb-1"><strong>Nivel 1 (0-4.9):</strong> {{ r.level1 }}</div>
+                                <div class="mb-1"><strong>Nivel 2 (5-6.9):</strong> {{ r.level2 }}</div>
+                                <div class="mb-1"><strong>Nivel 3 (7-8.4):</strong> {{ r.level3 }}</div>
+                                <div><strong>Nivel 4 (8.5-10):</strong> {{ r.level4 }}</div>
+                            </div>
+                        </details>
+                    </td>
+                    <td class="text-end">
+                        <a href="/admin/rubrics/{{ r.id }}/edit" class="btn btn-outline-primary btn-sm py-0 px-2 me-1">Editar</a>
+                        <form method="POST" action="/admin/rubrics/{{ r.id }}/delete" class="d-inline" onsubmit="return confirm('¿Seguro que deseas eliminar la rúbrica {{ r.name }}?');">
+                            <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">Borrar</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center py-4 text-muted">No hay rúbricas registradas.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
