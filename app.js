@@ -134,8 +134,21 @@ function getPedagogicalAdvice(compName, score) {
 function isInvalidRecommendation(text) {
   if (!text || typeof text !== 'string') return true;
   const t = text.trim().toLowerCase();
-  if (t.length < 15) return true;
-  if (t.includes('tu consejo') || t.includes('consejo formativo') || t.includes('1-2 frases') || t.includes('1 frase') || t.includes('contextualización') || t.includes('motivadora') || t.includes('saludo') || t.includes('aquí') || t.includes('...')) {
+  if (t.length < 20) return true;
+  if (
+    t.includes('tu consejo') ||
+    t.includes('consejo formativo') ||
+    t.includes('1-2 frases') ||
+    t.includes('1 frase') ||
+    t.includes('sugerencia práctica') ||
+    t.includes('sugerencia de mejora') ||
+    t.includes('sugerencia formativa') ||
+    t.includes('contextualización') ||
+    t.includes('motivadora') ||
+    t.includes('saludo') ||
+    t.includes('aquí') ||
+    t.includes('...')
+  ) {
     return true;
   }
   return false;
@@ -243,16 +256,17 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
 function buildSuggestionPrompt(record) {
   const compLines = record.competencias.map(c => {
     const match = getRubricMatch(c.competencia, c.valor);
-    return `- ${c.competencia}: Nivel ${match.level} (nota ${c.valor}/10)`;
+    return `- ${c.competencia}: nivel ${match.level}/4 (calificación ${c.valor}/10)`;
   }).join('\n');
 
-  return `Eres docente en el Centro Integrado Cuatrovientos.
-Para cada competencia según la nota del alumno, escribe una sugerencia formativa práctica y breve (1 sola frase directa de mejora):
+  return `Eres tutor docente en Cuatrovientos. Escribe un consejo formativo directo y práctico de 1 frase para cada competencia según el nivel del alumno. Comienza cada consejo con un verbo de acción (ej: Participa, Diseña, Planifica, Consulta, Contrasta).
+
+Competencias evaluadas:
 ${compLines}
 
-Responde ÚNICAMENTE con un objeto JSON:
+Responde ÚNICAMENTE un objeto JSON asociando cada competencia a su consejo:
 {
-${record.competencias.map(c => `  "${c.competencia}": "sugerencia práctica de 1 frase"`).join(',\n')}
+${record.competencias.map(c => `  "${c.competencia}": "..."`).join(',\n')}
 }`;
 }
 
@@ -389,8 +403,8 @@ window.addEventListener('message', async ({source, data}) => {
         try {
           const response = await wllama.createChatCompletion({
             abortSignal: controller.signal, cache_prompt: true,
-            messages:[{role:'system', content:'Eres docente de Cuatrovientos. Responde exclusivamente en JSON.'}, {role:'user', content:buildSuggestionPrompt(record)}],
-            max_tokens: Math.min(220, 40 + record.competencias.length * 30), temperature:0.2
+            messages:[{role:'system', content:'Eres tutor docente de Formación Profesional en Cuatrovientos. Redactas consejos de mejora prácticos y pedagógicos. Responde exclusivamente con un objeto JSON.'}, {role:'user', content:buildSuggestionPrompt(record)}],
+            max_tokens: Math.min(220, 40 + record.competencias.length * 30), temperature:0.35
           });
           raw = response?.choices?.[0]?.message?.content || '';
         } catch {
@@ -431,8 +445,8 @@ benchmark.addEventListener('click', async () => {
     const record = Feedback.prepare(Feedback.parseStudents('5 6 4 7 5 6')).records[0];
     const response = await wllama.createChatCompletion({
       abortSignal:controller.signal, cache_prompt:false,
-      messages:[{role:'system',content:'Eres docente de Cuatrovientos. Responde exclusivamente en JSON.'},{role:'user',content:buildSuggestionPrompt(record)}],
-      max_tokens:Math.min(220, 40 + record.competencias.length * 30), temperature:0.2
+      messages:[{role:'system',content:'Eres tutor docente de Formación Profesional en Cuatrovientos. Redactas consejos de mejora prácticos y pedagógicos. Responde exclusivamente con un objeto JSON.'},{role:'user',content:buildSuggestionPrompt(record)}],
+      max_tokens:Math.min(220, 40 + record.competencias.length * 30), temperature:0.35
     });
     controller.signal.throwIfAborted();
     const info = {};
