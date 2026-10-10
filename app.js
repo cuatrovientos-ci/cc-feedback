@@ -243,14 +243,14 @@ function adaptModelOutputToFeedback(raw, record, provenance) {
 function buildSuggestionPrompt(record) {
   const compLines = record.competencias.map(c => {
     const match = getRubricMatch(c.competencia, c.valor);
-    return `- ${c.competencia} (Nivel ${match.level}): ${match.descriptor}`;
+    return `- ${c.competencia}: Nivel ${match.level} (nota ${c.valor}/10)`;
   }).join('\n');
 
   return `Eres docente en el Centro Integrado Cuatrovientos.
-Para cada competencia y descriptor observado de la rúbrica, redacta una sugerencia formativa práctica y motivadora de mejora (1 sola frase concreta por competencia):
+Para cada competencia según la nota del alumno, escribe una sugerencia formativa práctica y breve (1 sola frase directa de mejora):
 ${compLines}
 
-Responde ÚNICAMENTE con un objeto JSON asociando cada competencia a su sugerencia de mejora:
+Responde ÚNICAMENTE con un objeto JSON:
 {
 ${record.competencias.map(c => `  "${c.competencia}": "sugerencia práctica de 1 frase"`).join(',\n')}
 }`;
@@ -388,10 +388,9 @@ window.addEventListener('message', async ({source, data}) => {
       if (useAI) {
         try {
           const response = await wllama.createChatCompletion({
-            abortSignal: controller.signal, cache_prompt: false,
-            messages:[{role:'system', content:'Propón sugerencias formativas prácticas de mejora en formato JSON.'}, {role:'user', content:buildSuggestionPrompt(record)}],
-            max_tokens: Math.min(350, 60 + record.competencias.length * 40), temperature:0.2,
-            response_format: {type:'json_object'}
+            abortSignal: controller.signal, cache_prompt: true,
+            messages:[{role:'system', content:'Eres docente de Cuatrovientos. Responde exclusivamente en JSON.'}, {role:'user', content:buildSuggestionPrompt(record)}],
+            max_tokens: Math.min(220, 40 + record.competencias.length * 30), temperature:0.2
           });
           raw = response?.choices?.[0]?.message?.content || '';
         } catch {
@@ -432,8 +431,8 @@ benchmark.addEventListener('click', async () => {
     const record = Feedback.prepare(Feedback.parseStudents('5 6 4 7 5 6')).records[0];
     const response = await wllama.createChatCompletion({
       abortSignal:controller.signal, cache_prompt:false,
-      messages:[{role:'system',content:'Propón sugerencias formativas prácticas de mejora en formato JSON.'},{role:'user',content:buildSuggestionPrompt(record)}],
-      max_tokens:Math.min(350, 60 + record.competencias.length * 40), temperature:0.2, response_format:{type:'json_object'}
+      messages:[{role:'system',content:'Eres docente de Cuatrovientos. Responde exclusivamente en JSON.'},{role:'user',content:buildSuggestionPrompt(record)}],
+      max_tokens:Math.min(220, 40 + record.competencias.length * 30), temperature:0.2
     });
     controller.signal.throwIfAborted();
     const info = {};
