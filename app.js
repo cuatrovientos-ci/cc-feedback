@@ -7,173 +7,66 @@ const spinner = document.getElementById('connect-spinner');
 const unload = document.getElementById('unload');
 const cleanCache = document.getElementById('clean-cache');
 
-let wllama = null, aiLoaded = false, busy = false, active = null, abortGeneration = null, loadTimer = null;
+let wllama = null, aiLoaded = false, busy = false, active = null;
+let loadingModel = false, stopping = null, loadController = null, generationController = null;
+let loadTask = null, generationTask = null, loadTimer = null, lastRowSeconds = null;
+const config = globalThis.CC_MODEL;
 
 function state(text, working = false) {
   label.textContent = text;
   spinner.hidden = !working;
-  button.disabled = working || aiLoaded;
+  button.disabled = working || aiLoaded || busy || Boolean(stopping);
   button.setAttribute('aria-busy', String(working));
-  if (unload) unload.disabled = !wllama;
+  unload.disabled = !(wllama || loadingModel || busy);
+  cleanCache.disabled = loadingModel || busy || Boolean(stopping);
 }
-
-function send(message) {
-  frame.contentWindow.postMessage(message, '*');
-}
+function send(message) { frame.contentWindow.postMessage(message, '*'); }
 
 async function stop() {
+  if (stopping) return stopping;
   clearTimeout(loadTimer);
-  if (abortGeneration) {
-    try { abortGeneration(); } catch {}
-    abortGeneration = null;
-  }
-  if (wllama) {
-    try { await wllama.exit(); } catch {}
-    wllama = null;
-  }
-  aiLoaded = false;
-  busy = false;
   active = null;
-  state('Cargar IA Wllama (CPU · Opcional)');
+  loadController?.abort();
+  generationController?.abort();
+  stopping = (async () => {
+    // Wait until abort has been observed before releasing or reusing the engine.
+    await Promise.allSettled([loadTask, generationTask].filter(Boolean));
+    const engine = wllama;
+    wllama = null;
+    if (engine) { try { await engine.exit(); } catch {} }
+    aiLoaded = false; busy = false; loadingModel = false;
+  })();
+  state('Deteniendo…', true);
+  try { await stopping; } finally {
+    stopping = null;
+    state('Cargar IA Wllama (CPU · Opcional)');
+  }
 }
 
 async function clearStorageQuota() {
-  let cleared = false;
-  if (typeof caches !== 'undefined') {
-    try {
-      const keys = await caches.keys();
-      for (const k of keys) {
-        await caches.delete(k);
-        cleared = true;
-      }
-    } catch (e) {
-      console.warn('Error al limpiar Cache Storage:', e);
-    }
-  }
-
-  if (navigator.storage && navigator.storage.getDirectory) {
-    try {
-      const root = await navigator.storage.getDirectory();
-      for await (const [name] of root.entries()) {
-        try {
-          await root.removeEntry(name, { recursive: true });
-          cleared = true;
-        } catch {}
-      }
-    } catch (e) {
-      console.warn('Error al limpiar OPFS:', e);
-    }
-  }
-
-  if (typeof indexedDB !== 'undefined' && indexedDB.databases) {
-    try {
-      const dbs = await indexedDB.databases();
-      for (const db of dbs) {
-        if (db.name) {
-          try { indexedDB.deleteDatabase(db.name); cleared = true; } catch {}
-        }
-      }
-    } catch (e) {
-      console.warn('Error al limpiar IndexedDB:', e);
-    }
-  }
-
-  return cleared;
-}
-
-function error(code, detail = '') {
-  const request = active;
-  stop();
-  if (request) send({type: 'failure', request, code, detail});
-  connection.hidden = false;
-  const msg = ({
-    unsupported: 'Tu navegador no soporta WebAssembly. Usa un navegador moderno actualizado.',
-    timeout: 'La descarga o inicialización ha superado el tiempo límite. Comprueba la conexión y reintenta.',
-    model: 'No se pudo cargar el modelo en CPU.',
-    cancelled: 'Operación cancelada.'
-  })[code] || 'Aviso en la carga de IA.';
-
-  connection.className = 'alert alert-warning mt-2';
-  connection.textContent = detail ? `${msg} [Detalle: ${detail}]` : msg;
+  if (!globalThis.caches) throw new Error('Este navegador no permite gestionar la caché.');
+  // This app only owns its explicitly named cache. Never clear an entire origin.
+  await caches.delete(config.cache);
+  if ((await caches.keys()).includes(config.cache)) throw new Error('No se pudo verificar el borrado.');
 }
 
 function getRubricDescriptor(compName, score) {
-  const rubrics = globalThis.LOCAL_RUBRICS || [];
-  if (!rubrics.length) {
-    return `Desempeño observado en ${compName} con calificación ${score}.`;
-  }
-  const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-  const target = norm(compName);
-  
-  let found = rubrics.find(r => {
-    const rName = norm(r.name);
-    return target === rName || target.includes(rName) || rName.includes(target);
-  });
-  
-  if (!found) {
-    if (target.includes('innovacion')) found = rubrics.find(r => norm(r.name).includes('innovacion'));
-    else if (target.includes('comunica')) found = rubrics.find(r => norm(r.name).includes('comunicacion oral'));
-    else if (target.includes('autonomia')) found = rubrics.find(r => norm(r.name).includes('autonomia'));
-  }
-  
-  if (!found || !Array.isArray(found.levels) || !found.levels.length) {
-    return `Demuestra un desempeño adecuado según el trabajo observado en ${compName}.`;
-  }
-  
-  const val = Number(score) || 0;
-  let levelIdx = 0;
-  if (val >= 8.5) levelIdx = 3;
-  else if (val >= 7.0) levelIdx = 2;
-  else if (val >= 5.0) levelIdx = 1;
-  else levelIdx = 0;
-  
-  return found.levels[levelIdx] || found.levels[0];
+  return `Calificación registrada: ${score}/10. La nota no asigna por sí sola un nivel de rúbrica ni acredita conductas concretas.`;
 }
 
 function getPedagogicalAdvice(compName, score) {
-  const val = Number(score) || 0;
-  const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-  const c = norm(compName);
-
-  if (c.includes('innova') || c.includes('emprend')) {
-    if (val < 5) return 'Atrévete a proponer ideas en los proyectos y participa activamente en las sesiones de ideación sin temor a equivocarte.';
-    if (val < 7) return 'Buen trabajo siguiendo las pautas dadas; da un paso más proponiendo mejoras creativas y soluciones propias.';
-    return 'Excelente iniciativa y visión innovadora. Sigue liderando la búsqueda de soluciones creativas y compartiendo tus ideas con el grupo.';
-  }
-
-  if (c.includes('equipo')) {
-    if (val < 5) return 'Es fundamental mejorar la comunicación con tus compañeros, cumplir los plazos acordados en el grupo y escuchar las distintas opiniones.';
-    if (val < 7) return 'Colaboras bien en el equipo; procura asumir un rol más participativo en la organización y en la toma de decisiones compartidas.';
-    return 'Gran capacidad de trabajo cooperativo, facilitando el buen clima y apoyando al resto del equipo en los momentos clave.';
-  }
-
-  if (c.includes('comunica')) {
-    if (val < 5) return 'Cuida la estructuración de tus exposiciones y escritos, adaptando el registro al entorno profesional y prestando atención a la claridad.';
-    if (val < 7) return 'Te expresas con claridad; para seguir avanzando, practica una escucha activa más reflexiva y enriquece tu vocabulario técnico.';
-    return 'Comunicación muy eficaz y asertiva, adecuando perfectamente el lenguaje tanto en intervenciones orales como en entregas escritas.';
-  }
-
-  if (c.includes('digital')) {
-    if (val < 5) return 'Practica más con las herramientas digitales del curso y asegúrate de verificar la calidad y rigor de los resultados obtenidos.';
-    if (val < 7) return 'Utilizas las plataformas digitales con soltura; profundiza en el uso crítico y seguro de nuevas herramientas para optimizar tu trabajo.';
-    return 'Dominio óptimo y con sentido crítico de los entornos y herramientas digitales, aprovechándolas al máximo en tus entregas.';
-  }
-
-  if (c.includes('entorno') || c.includes('adaptaci')) {
-    if (val < 5) return 'Intenta afrontar los cambios imprevistos con flexibilidad y disposición de aprendizaje, buscando apoyo cuando surjan dudas.';
-    if (val < 7) return 'Te adaptas adecuadamente a situaciones nuevas; mantén una actitud abierta y proactiva ante los ajustes que requieran los proyectos.';
-    return 'Excelente flexibilidad y resiliencia ante cambios o retos imprevistos, respondiendo de forma constructiva y rápida.';
-  }
-
-  if (c.includes('autonom') || c.includes('responsa')) {
-    if (val < 5) return 'Organiza mejor tus tiempos de entrega y planifica tus tareas diarias de forma más independiente sin esperar recordatorios.';
-    if (val < 7) return 'Cumples con tus compromisos habitualmente; busca anticiparte a los problemas gestionando tus recursos con mayor autonomía.';
-    return 'Gran nivel de autonomía y responsabilidad, gestionando con madurez tus tiempos y asumiendo con rigor cada uno de tus compromisos.';
-  }
-
-  if (val < 5) return `Conviene repasar los puntos clave de ${compName}, consultar dudas de inmediato y apoyarse en las dinámicas de clase para afianzar el aprendizaje.`;
-  if (val < 7) return `Continúa trabajando con regularidad en ${compName} y busca momentos para tomar mayor iniciativa en las tareas prácticas.`;
-  return `Excelente nivel en ${compName}. Sigue manteniendo esta implicación y comparte tus buenas prácticas con el grupo.`;
+  const c = compName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const exercises = [
+    [/innova|emprend/, 'Propón dos soluciones a un problema del proyecto y compara sus ventajas antes de elegir una.'],
+    [/equipo/, 'Acuerda con el equipo una tarea, un plazo y una forma de revisar juntos su cumplimiento.'],
+    [/comunica/, 'Prepara una exposición con introducción, dos ideas principales y cierre; solicita una sugerencia de mejora.'],
+    [/digital/, 'Contrasta una fuente digital y comprueba el resultado de una herramienta antes de incorporarlo al trabajo.'],
+    [/entorno|adaptaci/, 'Ante un cambio del proyecto, anota dos alternativas y explica cómo adaptarías tu planificación.'],
+    [/autonom|responsa/, 'Planifica las entregas con una lista semanal y reserva un momento para revisar tus avances.']
+  ];
+  const action = exercises.find(([pattern]) => pattern.test(c))?.[1]
+    || `Elige con tu docente una actividad de ${compName} y acuerda cómo comprobar el progreso.`;
+  return `${action} Ajusta la dificultad y los apoyos con tu docente según las evidencias de aprendizaje.`;
 }
 
 function isInvalidRecommendation(text) {
@@ -206,7 +99,7 @@ function extractJsonBlock(raw) {
   return text;
 }
 
-function adaptModelOutputToFeedback(raw, record) {
+function adaptModelOutputToFeedback(raw, record, provenance) {
   let parsed = null;
   const clean = extractJsonBlock(raw);
   try {
@@ -242,12 +135,13 @@ function adaptModelOutputToFeedback(raw, record) {
     if (key && val) recMap.set(key, String(val).trim());
   }
 
+  let aiParts = 0, ruleParts = 0;
   const fixedCompetencias = record.competencias.map(recComp => {
     const expectedNorm = norm(recComp.competencia);
     
     let recText = '';
     for (const [k, v] of recMap.entries()) {
-      if (k === expectedNorm || k.includes(expectedNorm) || expectedNorm.includes(k)) {
+      if (k === expectedNorm) {
         recText = v;
         break;
       }
@@ -255,7 +149,8 @@ function adaptModelOutputToFeedback(raw, record) {
 
     if (isInvalidRecommendation(recText)) {
       recText = getPedagogicalAdvice(recComp.competencia, recComp.valor);
-    }
+      ruleParts++;
+    } else { aiParts++; }
 
     const rubricText = getRubricDescriptor(recComp.competencia, recComp.valor);
 
@@ -268,13 +163,16 @@ function adaptModelOutputToFeedback(raw, record) {
 
   let intro = String(parsed.intro || parsed.introduccion || '').trim();
   if (isInvalidRecommendation(intro) || intro.length < 15) {
+    ruleParts++;
     intro = 'A continuación se detalla la retroalimentación formativa de las competencias evaluadas en este periodo:';
-  }
+  } else { aiParts++; }
 
   let conclusion = String(parsed.conclusion || parsed.conclusiones || parsed.cierre || '').trim();
   if (isInvalidRecommendation(conclusion) || conclusion.length < 15) {
-    conclusion = 'Sigue mostrando constancia y dedicación para consolidar tu progreso en los próximos proyectos.';
-  }
+    ruleParts++;
+    conclusion = 'Revisa estas propuestas con tu docente y elige un objetivo concreto para el próximo proyecto.';
+  } else { aiParts++; }
+  provenance.method = aiParts ? (ruleParts ? 'mixed' : 'ai') : 'rules';
 
   return [{
     id: record.id,
@@ -287,7 +185,7 @@ function adaptModelOutputToFeedback(raw, record) {
 function buildCompactPrompt(record) {
   const compLines = record.competencias.map(c => `- ${c.competencia}: ${c.valor}/10`).join('\n');
   return `Eres docente en el Centro Integrado Cuatrovientos.
-Escribe una recomendación pedagógica breve y constructiva para este alumno según sus notas en competencias (escala 0 a 10):
+Propón acciones concretas de mejora. No afirmes hábitos, personalidad, diagnósticos ni conductas observadas: solo dispones de notas. No asignes niveles de rúbrica.\nEscribe una recomendación pedagógica breve y constructiva para este alumno según sus notas en competencias (escala 0 a 10):
 ${compLines}
 
 Responde ÚNICAMENTE en JSON válido con este formato:
@@ -300,167 +198,142 @@ ${record.competencias.map(c => `    "${c.competencia}": "tu consejo concreto par
 }`;
 }
 
-async function downloadModelToMemoryBlob(url, modelName) {
-  state(`Descargando ${modelName}…`, true);
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  const total = Number(resp.headers.get('content-length') || 0);
-  const reader = resp.body.getReader();
-  const chunks = [];
+async function modelBlob(signal) {
+  let cache;
+  try {
+    cache = await caches.open(config.cache);
+    const stored = await cache.match(config.url);
+    if (stored) return await stored.blob();
+  } catch { /* Storage may be disabled; memory-only loading remains available. */ }
+  signal.throwIfAborted();
+  const response = await fetch(config.url, {signal, credentials: 'omit', referrerPolicy: 'no-referrer'});
+  if (!response.ok) throw new Error(`Descarga HTTP ${response.status}`);
+  const reader = response.body.getReader(), chunks = [];
+  const total = Number(response.headers.get('content-length') || 0);
   let loaded = 0;
   while (true) {
-    const { done, value } = await reader.read();
+    const {done, value} = await reader.read();
     if (done) break;
-    chunks.push(value);
-    loaded += value.length;
-    const pct = total ? Math.min(100, Math.max(0, Math.round((loaded / total) * 100))) : 0;
-    state(`Descargando en RAM: ${pct} %`, true);
+    signal.throwIfAborted(); chunks.push(value); loaded += value.length;
+    state(total ? `Descargando modelo: ${Math.round(100 * loaded / total)} %` : `Descargando: ${Math.round(loaded / 1048576)} MB`, true);
   }
-  return new Blob(chunks);
+  signal.throwIfAborted();
+  const blob = new Blob(chunks);
+  try { if (cache) await cache.put(config.url, new Response(blob)); }
+  catch { connection.hidden = false; connection.textContent = 'Sin espacio para guardar el modelo: se usará solo en memoria.'; }
+  signal.throwIfAborted();
+  return blob;
 }
 
 button.addEventListener('click', async () => {
-  connection.hidden = true;
-  await stop();
-  state('Iniciando runtime Wllama (CPU)…', true);
-  try {
-    loadTimer = setTimeout(() => { error('timeout', 'Tiempo de espera agotado'); }, 600000);
-
-    const { Wllama } = await import('https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/esm/index.js');
-    const pathConfig = {
-      default: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/src/wasm/wllama.wasm'
-    };
-
-    wllama = new Wllama(pathConfig);
-    wllama.setCompat({
-      worker: 'https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.8.1/wasm/wllama.js',
-      wasm: 'https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.8.1/wasm/wllama.wasm'
-    }, 'all');
-
-    const ggufUrl = 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
-    state('Descargando Qwen 2.5 0.5B GGUF…', true);
-
-    try {
-      await wllama.loadModelFromUrl(ggufUrl, {
-        n_ctx: 1024,
-        progressCallback: ({ loaded, total }) => {
-          const pct = total ? Math.min(100, Math.max(0, Math.round((loaded / total) * 100))) : 0;
-          state(`Descargando modelo: ${pct} %`, true);
-        }
-      });
-    } catch (cacheErr) {
-      console.warn('Fallback a descarga directa en RAM Blob:', cacheErr);
-      const blob = await downloadModelToMemoryBlob(ggufUrl, 'Qwen 2.5 0.5B');
-      state('Cargando modelo en motor CPU…', true);
-      await wllama.loadModel([blob], { n_ctx: 1024 });
-    }
-
-    clearTimeout(loadTimer);
+  if (loadingModel || busy || stopping || aiLoaded) return;
+  loadingModel = true; connection.hidden = true;
+  const controller = new AbortController(); loadController = controller;
+  state('Iniciando Wllama…', true);
+  loadTimer = setTimeout(() => controller.abort(new Error('Tiempo de carga agotado.')), 600000);
+  loadTask = (async () => {
+    const {Wllama} = await import(config.runtime);
+    controller.signal.throwIfAborted();
+    const engine = new Wllama({default: config.wasm}); wllama = engine;
+    engine.setCompat({worker: config.compatWorker, wasm: config.compatWasm}, 'all');
+    const blob = await modelBlob(controller.signal);
+    controller.signal.throwIfAborted();
+    state('Preparando modelo en memoria…', true);
+    await engine.loadModel([blob], {n_ctx: 2048, n_gpu_layers: 0});
+    controller.signal.throwIfAborted();
     aiLoaded = true;
-    unload.disabled = false;
-    state('IA Wllama cargada en CPU');
+    const threads = engine.getNumThreads?.();
     connection.hidden = false;
     connection.className = 'alert alert-success mt-2';
-    connection.textContent = 'Modelo Qwen 2.5 cargado en CPU. Las recomendaciones contarán con apoyo de IA generativa.';
-  } catch (err) {
-    console.error('Error al inicializar Wllama:', err);
-    error('model', err?.message || String(err));
+    connection.textContent = `Modelo Qwen 0.5B listo. ${threads ? `${threads} hilo(s) de ejecución.` : 'Número de hilos no disponible.'} Prueba una fila para medir el tiempo en este equipo.`;
+  })();
+  try { await loadTask; }
+  catch {
+    if (!stopping) {
+      connection.hidden = false; connection.className = 'alert alert-warning mt-2';
+      connection.textContent = controller.signal.aborted ? 'Carga interrumpida o tiempo agotado.' : 'No se pudo cargar el modelo. Puedes usar las propuestas por reglas.';
+      const engine = wllama; wllama = null;
+      if (engine) { try { await engine.exit(); } catch {} }
+      aiLoaded = false;
+    }
+  } finally {
+    clearTimeout(loadTimer); loadingModel = false; loadTask = null;
+    if (!stopping) state(aiLoaded ? 'IA Wllama cargada en CPU' : 'Cargar IA Wllama (CPU · Opcional)');
   }
 });
 
-if (cleanCache) {
-  cleanCache.addEventListener('click', async () => {
-    cleanCache.disabled = true;
-    state('Liberando almacenamiento…', true);
+cleanCache.addEventListener('click', async () => {
+  if (busy || loadingModel || stopping) return;
+  await stop(); state('Limpiando caché del modelo…', true); cleanCache.disabled = true;
+  try {
     await clearStorageQuota();
-    await stop();
-    cleanCache.disabled = false;
-    connection.hidden = false;
-    connection.className = 'alert alert-info mt-2';
-    connection.textContent = 'Almacenamiento y caché liberados correctamente.';
-    state('Cargar IA Wllama (CPU · Opcional)');
-  });
-}
-
-if (unload) {
-  unload.addEventListener('click', async () => {
-    await stop();
-    connection.hidden = false;
-    connection.className = 'alert alert-secondary mt-2';
-    connection.textContent = 'Modelo descargado. El sistema sigue 100% activo con el motor pedagógico institucional.';
-  });
-}
-
-frame.addEventListener('load', () => { if (busy) stop(); });
-window.addEventListener('pagehide', stop);
+    connection.textContent = 'Caché de esta versión eliminada y borrado verificado. Las cachés de versiones anteriores no se modifican.';
+  } catch { connection.textContent = 'No se pudo verificar el borrado de la caché. Revisa el almacenamiento del sitio en el navegador.'; }
+  finally { connection.hidden = false; state('Cargar IA Wllama (CPU · Opcional)'); }
+});
+unload.addEventListener('click', async () => {
+  const request = active;
+  if (request) send({type:'failure', request, code:'cancelled'});
+  await stop();
+  connection.hidden = false; connection.textContent = 'Modelo retirado de memoria. Puedes continuar con propuestas por reglas.';
+});
+frame.addEventListener('load', () => { if (busy) void stop(); });
+window.addEventListener('pagehide', () => { void stop(); });
 
 window.addEventListener('message', async ({source, data}) => {
   if (source !== frame.contentWindow) return;
   if (data?.type === 'cancel') {
-    if (busy && abortGeneration) abortGeneration();
-    busy = false;
-    active = null;
+    if (busy || aiLoaded || loadingModel) void stop();
     return;
   }
   if (data?.type !== 'generate' || typeof data.request !== 'string') return;
-
   const request = data.request;
-  try {
+  if (busy || stopping || loadingModel) { send({type:'failure', request, code:'busy'}); return; }
+  busy = true; active = request;
+  const controller = new AbortController(); generationController = controller;
+  state(aiLoaded ? 'IA Wllama cargada en CPU' : 'Generando propuestas…');
+  generationTask = (async () => {
     const records = Feedback.validateRecords(data.records);
-    if (records.length > 40) throw new Error('Batch too large');
-
-    busy = true;
-    active = request;
-    let aborted = false;
-    abortGeneration = () => { aborted = true; };
-    const result = [];
-
+    if (records.length > 40) throw new Error('Lote demasiado grande');
+    const result = [], provenance = {};
+    const useAI = data.model === 'qwen-cpu' && aiLoaded && wllama;
     for (let i = 0; i < records.length; i++) {
-      if (aborted || active !== request) throw new Error('aborted');
-      const record = records[i];
-
-      send({type: 'progress', request, stage: 'waiting', current: i + 1, total: records.length});
-
+      controller.signal.throwIfAborted();
+      const record = records[i], started = performance.now();
+      send({type:'progress', request, stage:'waiting', current:i+1, total:records.length, estimate:useAI && lastRowSeconds ? Math.ceil(lastRowSeconds * (records.length-i)) : null});
       let raw = '';
-      const useAI = (data?.model === 'qwen-cpu') && aiLoaded && wllama;
+      const info = {reason: data.model === 'qwen-cpu' && !useAI ? 'not_loaded' : ''};
       if (useAI) {
         try {
-          const promptContent = buildCompactPrompt(record);
           const response = await wllama.createChatCompletion({
-            messages: [
-              { role: 'system', content: 'Eres docente en España. Responde exclusivamente con un JSON válido y conciso.' },
-              { role: 'user', content: promptContent }
-            ],
-            max_tokens: 300,
-            temperature: 0.2
+            abortSignal: controller.signal, cache_prompt: false,
+            messages:[{role:'system', content:'Propón actividades formativas, sin inventar observaciones sobre el alumno. Responde en JSON.'}, {role:'user', content:buildCompactPrompt(record)}],
+            max_tokens: Math.min(1000, 160 + record.competencias.length * 90), temperature:0.2,
+            response_format: {type:'json_object'}
           });
-          if (aborted || active !== request) throw new Error('aborted');
           raw = response?.choices?.[0]?.message?.content || '';
-        } catch (inferenceErr) {
-          console.warn(`Aviso inferencia Wllama fila ${i + 1}:`, inferenceErr);
+        } catch {
+          controller.signal.throwIfAborted();
+          info.reason = 'inference_failed';
         }
+        lastRowSeconds = Math.max(1, Math.round((performance.now()-started)/1000));
       }
-
-      // Si no hay IA o si la IA no dio respuesta, adaptModelOutputToFeedback aplica las rúbricas oficiales y los consejos pedagógicos
-      const normalized = adaptModelOutputToFeedback(raw, record);
+      controller.signal.throwIfAborted();
+      const normalized = adaptModelOutputToFeedback(raw, record, info);
+      if (useAI && info.method !== 'ai' && !info.reason) info.reason = 'incomplete';
+      provenance[record.id] = info;
       result.push(...Feedback.response(JSON.stringify(normalized), [record]));
     }
-
-    if (active === request) {
-      send({type: 'result', request, result: Feedback.response(JSON.stringify(result), records)});
-    }
-  } catch (err) {
-    console.error('Error detallado en generación en app.js:', err);
-    if (active === request) {
-      send({type: 'failure', request, code: 'invalid_response', detail: err?.message || String(err)});
-    }
-  } finally {
-    if (active === request) {
-      busy = false;
-      active = null;
-      abortGeneration = null;
+    if (active === request) send({type:'result', request, result:Feedback.response(JSON.stringify(result), records), provenance});
+  })();
+  try { await generationTask; }
+  catch { if (active === request && !controller.signal.aborted) send({type:'failure', request, code:'invalid_response'}); }
+  finally {
+    generationTask = null;
+    if (!stopping) {
+      busy = false; active = null; generationController = null;
+      state(aiLoaded ? 'IA Wllama cargada en CPU' : 'Cargar IA Wllama (CPU · Opcional)');
     }
   }
 });
-
 state('Cargar IA Wllama (CPU · Opcional)');

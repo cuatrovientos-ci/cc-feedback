@@ -1,16 +1,15 @@
-# Actualización de la rama webbrowser-llm
+# Aceptación de CC-feedback local
 
-Esta rama utiliza **Wllama (WebAssembly / llama.cpp)** con modelos cuantizados en formato GGUF (Qwen 2.5 1.5B) ejecutados de forma local por CPU/Wasm. Consulta el [README](../README.md) para el flujo actualizado, requisitos y comprobaciones de despliegue.
+La arquitectura, modelo y diagrama vigentes se describen en el [README](../README.md). Esta rama usa Wllama 3.8.1 con Qwen 2.5 **0.5B**, además de propuestas por reglas. No asigna niveles de rúbrica automáticamente.
 
-## Requisitos de aceptación
+Pendiente de comprobar en el despliegue real de PythonAnywhere:
 
-- Probar la carga y ejecución de Wllama en los equipos de uso (funciona en ordenadores con 8 GB de RAM sin activar flags en el navegador).
-- Verificar que la primera descarga del modelo GGUF y runtime Wasm se realiza correctamente y queda en caché local (IndexedDB).
-- Comprobar que no se envían nombres, correos ni datos identificativos al motor Wllama, manteniendo el editor en un iframe aislado con sandbox.
-- Confirmar que la inferencia no realiza llamadas de red ni telemetría a servicios en la nube.
-- Completar identidad del responsable, contacto/DPD, base jurídica, plazos de conservación y canal de derechos en `privacidad.html`; obtener autorización institucional antes del uso con datos reales.
-- Revisar siempre el borrador y destinatario antes de abrir Gmail.
+- Publicar todos los archivos actuales y comprobar MIME de JS/Wasm, HTTPS y caché de versiones.
+- Probar carga, memoria y calidad con datos ficticios en equipos representativos; no se garantiza que cualquier equipo de 8 GB sea suficiente.
+- Evaluar COOP/COEP para varios hilos y comprobar que no rompen el iframe ni Gmail.
+- Confirmar mediante inspección de red que no salen notas durante inferencia. El alojamiento y la descarga de pesos sí generan metadatos de conexión.
+- Probar cancelación de descarga e inferencia, datos retirados por inactividad y limpieza de la caché propia. Las cachés antiguas no se borran automáticamente.
+- Completar información institucional y validar proveedores, licencia del modelo, conservación y autorización del centro.
+- Validar las propuestas pedagógicas y mantener revisión humana. Una respuesta bien formada puede contener consejos inadecuados.
 
-## Pruebas
-
-Las pruebas automatizadas de `tests/browser.cjs` simulan el módulo Wllama para validar el aislamiento, manejo de errores, streaming, lotes y cancelación sin comprometer datos confidenciales.
+Las pruebas automatizadas simulan Wllama y no sustituyen estas comprobaciones de aceptación. No se ha modificado ni verificado la configuración de la cuenta PythonAnywhere desde esta revisión.

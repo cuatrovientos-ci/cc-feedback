@@ -1,21 +1,14 @@
-# CC-feedback con Wllama en el navegador
+# CC-feedback: propuestas formativas locales
 
-Rama experimental `webbrowser-llm`. Sustituye la inferencia previa por **Wllama (WebAssembly / llama.cpp) y Qwen 2.5 1.5B Instruct GGUF (Q4_K_M)**. No requiere cuenta de IA, API key, servidor de generación ni activar flags experimentales en Google Chrome. Es compatible con ordenadores de 8 GB de RAM al ejecutarse mediante WebAssembly por CPU. La rama principal conserva su implementación anterior.
-
-## Características y compatibilidad
-
-- **Sin flags**: Funciona directamente en cualquier navegador moderno (Google Chrome, Edge, Firefox, Safari) sin habilitar ajustes experimentales.
-- **Bajo consumo de memoria**: El modelo cuantizado GGUF ocupa ~1 GB de RAM, funcionando sin problemas en ordenadores con 8 GB de RAM.
-- **WebAssembly**: No exige aceleración gráfica WebGPU específica; aprovecha WebAssembly (con SIMD y multithreading cuando esté disponible).
-- **Caché en el dispositivo**: Tras la primera descarga desde Hugging Face, el modelo se guarda en el almacenamiento local del navegador (IndexedDB) para arranques rápidos y uso offline.
+Rama `webbrowser-llm`. Combina propuestas por reglas con IA opcional **Wllama 3.8.1 y Qwen 2.5 0.5B Instruct GGUF Q4_K_M**, ejecutada en el navegador por CPU. PythonAnywhere sirve los archivos de la web; la aplicación no incluye un servidor de inferencia.
 
 ## Uso
 
-1. Sirve la carpeta por HTTPS o localhost. No abras `index.html` como `file://`.
-2. Pulsa **Cargar modelo Wllama**. La primera vez descargará el runtime Wasm y los pesos del modelo GGUF mostrando el porcentaje de progreso. Las siguientes veces cargará directamente desde la caché local.
-3. Pega hasta diez filas de notas por lote. Se mantienen cabeceras, nombre, correo y total opcionales, notas entre 0 y 10, y nombres/correos de ejemplo locales si se omiten.
-4. Genera. Se procesa una fila cada vez con el modelo local; se muestra el número de fila y el tiempo transcurrido. Una salida incompleta se rechaza sin recurrir a IA remota.
-5. Abre cada borrador colapsado, revisa y edita. Editar invalida la confirmación. Gmail se abre solo tras revisión y acción expresa; no se envía correo automáticamente. Sustituye las direcciones `example.invalid` antes de enviar.
+1. Abre la web por HTTPS o localhost. Pega hasta **40 filas** de notas de 0 a 10. Cabecera, nombre, correo y total son opcionales. Sin nombres se asigna Alumno1, Alumno2, etc.; los correos de ejemplo deben sustituirse antes de enviar.
+2. Elige propuestas por reglas para empezar sin descargar un modelo. Para IA, pulsa «Cargar IA Wllama» y selecciona la opción de IA en el editor. Prueba una fila antes de un lote: el rendimiento y la memoria dependen del dispositivo.
+3. Cada borrador indica **Propuestas por reglas**, **Con IA local** o **Mixto**. Si la IA no está cargada, falla o entrega texto incompleto, se indica que se han usado reglas. Esta etiqueta describe el origen, no garantiza calidad pedagógica.
+4. Abre el borrador colapsado, revisa y adapta. Editarlo invalida la confirmación. Gmail solo se abre tras revisión y acción expresa; no se envía correo automáticamente.
+5. Cancelar envía una señal de interrupción, espera a que el motor la atienda y libera su instancia antes de permitir otra generación. La interrupción puede tardar durante una operación Wasm o la inicialización. Los resultados tardíos se descartan. Borrar los datos o caducar la sesión también libera el motor; para volver a usar IA hay que cargarlo de nuevo desde la caché.
 
 ```text
 1 2 3 4 5 6
@@ -23,37 +16,46 @@ Rama experimental `webbrowser-llm`. Sustituye la inferencia previa por **Wllama 
 9 3 4 5 6 4
 ```
 
-El botón **Descargar de memoria / cancelar carga** libera la instancia del motor Wllama y su memoria RAM.
+## Criterios pedagógicos
 
-## Adecuación al RGPD
+Las notas no se convierten automáticamente en niveles de rúbrica. Las propuestas por reglas plantean actividades, sin atribuir hábitos, personalidad o conductas observadas. La IA recibe instrucciones equivalentes, pero puede incumplirlas: la revisión docente sigue siendo necesaria. No se presentan estas reglas como equivalencias aprobadas por el centro. Cualquier futura conversión nota–nivel debe validarse institucionalmente.
 
-Las notas, recomendaciones y códigos se procesan localmente en el dispositivo. Nombres, correos y total permanecen en el editor aislado (iframe con sandbox y Content Security Policy restrictivo) y nunca se entregan al motor Wllama. La generación no utiliza servicios en la nube ni APIs remotas de IA.
+## Privacidad y adecuación al RGPD
 
-Si el docente conserva la correspondencia con el alumnado, el centro sigue tratando datos personales; el procesamiento local no equivale a anonimato ni a cumplimiento automático. Antes del uso real deben validarse la calidad educativa, las condiciones y licencia del modelo, la información institucional, conservación, seguridad del dispositivo y autorización del centro. Gmail recibe el destinatario y el texto al abrir el borrador mediante su URL.
+Nombres, correos y total permanecen en el editor aislado. El motor recibe códigos temporales, competencias y notas; la generación es local. Los datos del alumnado y borradores no se guardan deliberadamente en almacenamiento persistente. Se retiran al borrar, cancelar, salir o tras quince minutos de inactividad; la suspensión puede retrasar la limpieza. Los errores conservan temporalmente la entrada para reintentar.
 
-Las identidades y borradores se retiran al borrar, cancelar, salir o tras quince minutos de inactividad, con comprobación al volver de suspensión. La entrada se conserva temporalmente para reintentar errores. `privacidad.html` contiene la información de esta rama; no se carga `.env`.
+El runtime se sirve desde `assets/vendor`, junto con la web. El modelo se descarga de Hugging Face desde una revisión fija, configurada en `model-config.js`. PythonAnywhere y el distribuidor del modelo pueden tratar IP y metadatos de conexión. Gmail recibe destinatario y texto al abrir el borrador. El procesamiento local no garantiza anonimato ni cumplimiento automático: deben completarse responsable, DPD, base jurídica, conservación, condiciones de proveedores y autorización del centro.
+
+Solo el modelo se almacena en la caché `cc-feedback-model-v1` (Cache Storage). «Limpiar caché» elimina esa caché y comprueba que desaparece; no borra otros datos del origen ni cachés antiguas de Wllama. Para restos de versiones anteriores, utiliza la gestión de almacenamiento del navegador. Si no hay espacio o permiso para caché, se intenta cargar en memoria. No se garantiza funcionamiento offline completo ni compatibilidad universal.
 
 ## Flujo de datos
 
 ```mermaid
 flowchart TD
-    D["Descarga inicial: Wllama WASM y GGUF de Hugging Face"] --> W["Wllama en navegador (WebAssembly)"]
-    E["Editor aislado: notas e identidades opcionales"] --> P["Solo códigos temporales, competencias y notas"]
-    P --> W
-    W --> V["Validación de JSON, códigos y competencias"]
-    V --> R["Editor: asociación local, revisión y edición"]
-    R -->|"Acción expresa"| G["Gmail: destinatario y texto"]
-    E --> X["Limpieza local por borrado, salida o inactividad"]
-    W --> C["Cancelación: liberar instancia"]
+    H[PythonAnywhere: HTML, JS y runtime Wasm] --> B[Navegador]
+    HF[Hugging Face: modelo con revisión fija] --> C[Caché del modelo en el equipo]
+    E[Editor aislado: identidades y notas] --> P[Códigos temporales, competencias y notas]
+    P --> R[Propuestas por reglas]
+    P --> W[Wllama opcional: inferencia local]
+    C --> W
+    R --> V[Validación y etiqueta del método]
+    W --> V
+    V --> E
+    E --> D[Revisión docente del borrador]
+    D -->|Acción expresa| G[Gmail: texto y destinatario]
+    E --> X[Borrado o inactividad: retirar datos de la sesión]
 ```
 
-## Arquitectura y límites
+## Despliegue y rendimiento
 
-- `app.js`: inicialización de Wllama, descarga y caché del modelo GGUF, progreso, streaming con tokens, cancelación y comunicación con el editor.
-- `editor.html` y `editor.js`: marco `sandbox` sin `allow-same-origin`; aísla el DOM y las identidades del alumnado.
-- `core.js`: validación de entradas, construcción de prompts con rúbricas y correspondencia exacta de respuestas.
-- `rubricas.js`: rúbricas oficiales para guiar las recomendaciones pedagógicas.
+Publica los archivos de esta rama, incluidos `model-config.js` y `assets/vendor`, en PythonAnywhere. No utilices el ZIP histórico de `dist`: no se actualiza automáticamente. Sirve `.js` como JavaScript y `.wasm` como `application/wasm`, por HTTPS. No se ha comprobado desde este repositorio la configuración del despliegue real.
+
+El motor muestra el número real de hilos tras cargar. Para habilitar varios hilos, evalúa las cabeceras `Cross-Origin-Opener-Policy: same-origin` y `Cross-Origin-Embedder-Policy: require-corp`. Deben probarse en el dominio real con el iframe, descargas y apertura de Gmail. No se modifican automáticamente las cabeceras del servidor. Tras la primera fila con IA se ofrece una estimación orientativa para las restantes; no se guarda entre sesiones.
+
+El runtime oficial se incluye con versión fija; su paquete se verificó contra la integridad SHA-512 publicada en npm. Los pesos no se incluyen en Git. Consulta la licencia incluida en `assets/vendor/wllama-3.8.1/LICENCE` y las condiciones del modelo antes de autorizar su uso.
 
 ## Verificación
 
-`node --test tests/core.test.cjs` comprueba la validación y transformación de datos. `tests/browser.cjs` simula Wllama para validar aislamiento de identidades, generación local, integración con Gmail, errores y cancelación.
+`node --test tests/core.test.cjs` verifica entradas y correspondencia de resultados. `node tests/browser.cjs` requiere Playwright y un navegador; `CC_BROWSER` permite indicar su ruta. El navegador utiliza un Wllama simulado: comprueba reglas, IA, etiquetas de sustitución, aislamiento, revisión, cancelación, borrado selectivo y caducidad, pero no acredita calidad ni rendimiento del modelo real.
+
+Antes de publicar, prueba con datos ficticios en equipos del centro: descarga, una fila y lote, cancelación durante descarga/generación, revisión del contenido y ausencia de envío de notas en la pestaña de red. Comprueba también los registros y condiciones de PythonAnywhere.

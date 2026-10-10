@@ -6,7 +6,7 @@ function send(data){parent.postMessage(data,'*');}
 function reset(message=''){
   last=Date.now();clearInterval(elapsedTimer);pendingInput='';form.setAttribute('aria-busy','false');clearTimeout(timeout);request=null;identities.clear();records=[];input.value='';list.querySelectorAll('textarea').forEach(t=>t.value='');list.replaceChildren();results.style.display='none';loading.style.display='none';form.style.display='block';status.textContent=message;send({type:'cancel'});
 }
-const failures={not_connected:'El motor local no está listo. Vuelve a intentarlo.',busy:'Ya hay una generación en curso.',cancelled:'Generación detenida.',invalid_input:'Usa como máximo diez filas válidas por lote.',model:'No se pudo inicializar el modelo en este equipo.',provider:'No se pudo completar la generación.',invalid_response:'El formato no pudo procesarse. Reintenta con menos filas.',timeout:'Se ha agotado el tiempo de respuesta. Puedes volver a intentarlo.'};
+const failures={not_connected:'El motor local no está listo. Vuelve a intentarlo.',busy:'Ya hay una generación en curso.',cancelled:'Generación detenida.',invalid_input:'Usa como máximo 40 filas válidas por lote.',model:'No se pudo inicializar el modelo en este equipo.',provider:'No se pudo completar la generación.',invalid_response:'El formato no pudo procesarse. Reintenta con menos filas.',timeout:'Se ha agotado el tiempo de respuesta. Puedes volver a intentarlo.'};
 function fail(code, detail=''){
   const retained=pendingInput;const safe=Object.hasOwn(failures,code)?code:'provider';
   const detailText = detail ? ` [Detalle: ${detail}]` : '';
@@ -40,7 +40,7 @@ window.addEventListener('message',event=>{
   if(event.source!==parent||!request||event.data?.request!==request)return;
   expire();if(!request)return;
   const message=event.data;
-  if(message.type==='progress'){progress(message.stage);if(message.current&&message.total){document.getElementById('progress-detail').textContent+=` Fila ${message.current} de ${message.total}.`;if(message.stage==='waiting'){clearTimeout(timeout);timeout=setTimeout(()=>fail('timeout'),600000);}}return;}
+  if(message.type==='progress'){progress(message.stage);if(message.current&&message.total){document.getElementById('progress-detail').textContent+=` Fila ${message.current} de ${message.total}.`;if(message.estimate)document.getElementById('progress-detail').textContent+=` Tiempo restante orientativo: ${message.estimate} s.`;if(message.stage==='waiting'){clearTimeout(timeout);timeout=setTimeout(()=>fail('timeout'),600000);}}return;}
   if(message.type==='failure'){fail(message.code, message.detail);return;}
   if(message.type!=='result')return;
   try{
@@ -48,12 +48,15 @@ window.addEventListener('message',event=>{
     clearTimeout(timeout);clearInterval(elapsedTimer);pendingInput='';form.setAttribute('aria-busy','false');loading.style.display='none';results.style.display='block';
     for(const response of responses){
       const person=identities.get(response.id);
+      const info=message.provenance?.[response.id] || {};
+      const method=({rules:'Propuestas por reglas',ai:'Con IA local',mixed:'Mixto: IA local y reglas'})[info.method] || 'Método no disponible';
+      const reason=({not_loaded:'La IA no estaba cargada.',inference_failed:'La IA falló; se aplicaron reglas.',incomplete:'La respuesta de IA se completó con reglas.'})[info.reason] || '';
       let body=`Hola, ${person.name}:\n\n${response.intro}\n\n`;
       for(const c of response.competencias_evaluadas){const value=person.values.find(v=>v.competencia===c.nombre_competencia).valor;body+=`${c.nombre_competencia}\nCalificación: ${value}\nValoración: ${c.rubrica}\nSugerencia: ${c.recomendaciones}\n\n`;}
       if(person.total!==null)body+=`Nota final introducida por el docente: ${person.total}\n\n`;
-      body+=`${response.conclusion}\n\nAtentamente,\nEl Equipo Docente de Cuatrovientos.\n\nTexto elaborado con apoyo de inteligencia artificial y revisado por tu docente.`;
+      body+=`${response.conclusion}\n\nAtentamente,\nEl Equipo Docente de Cuatrovientos.\n\nMétodo de elaboración: ${method}. Revisión docente requerida antes de su envío.`;
       const card=node('article','','list-group-item p-3 mb-3'),heading=node('h3',person.name,'h5'),email=node('p',person.email+(person.emailExample?' (correo de ejemplo: sustituir en Gmail antes de enviar)':''));
-      const details=node('details','','draft-details'),summary=node('summary'),identity=node('span','','draft-identity'),hint=node('span','Revisar borrador','draft-toggle');identity.append(heading,email);summary.append(identity,hint);details.append(summary);details.addEventListener('toggle',()=>{hint.textContent=details.open?'Cerrar borrador':'Revisar borrador';});
+      const details=node('details','','draft-details'),summary=node('summary'),identity=node('span','','draft-identity'),hint=node('span','Revisar borrador','draft-toggle');identity.append(heading,email,node('p',method+(reason?' · '+reason:''),'small'));summary.append(identity,hint);details.append(summary);details.addEventListener('toggle',()=>{hint.textContent=details.open?'Cerrar borrador':'Revisar borrador';});
       const label=node('label','Revisa y adapta el borrador:');const area=node('textarea','','result-text form-control');area.value=body;area.spellcheck=false;area.autocomplete='off';area.id='draft-'+list.childElementCount;label.htmlFor=area.id;
       const review=node('label','','d-block my-3'),check=node('input');check.type='checkbox';review.append(check,document.createTextNode(' He revisado el contenido, las notas y el destinatario.'));
       const gmail=node('button','Generar Gmail','btn btn-outline-danger');gmail.type='button';gmail.disabled=true;
