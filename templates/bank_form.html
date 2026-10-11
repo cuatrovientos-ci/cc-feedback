@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Editar sugerencia{% endblock %}
+{% block content %}
+<div class="card p-4 mx-auto" style="max-width:850px">
+<h2>Editar sugerencia {{ position }}</h2>
+<p class="fw-bold">{{ family }} · {{ level }}</p>
+<p>Este texto se seleccionará junto con las otras propuestas del mismo nivel. No modifica la valoración de la rúbrica. No incluyas datos personales.</p>
+<form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label for="advice" class="form-label">Sugerencia</label>
+<textarea id="advice" name="advice" class="form-control mb-3" rows="5" minlength="20" maxlength="1000" required>{{ advice }}</textarea>
+<a class="btn btn-outline-secondary" href="{{ url_for('admin_recommendations') }}">Cancelar</a>
+<button class="btn btn-success" type="submit">Guardar sugerencia</button>
+</form>
+</div>
+{% endblock %}

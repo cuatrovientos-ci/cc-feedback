@@ -109,9 +109,6 @@
       })};
     });
   }
-  function prompt(records,rubrics) {
-    return 'Redacta retroalimentación educativa constructiva en español, con recomendaciones prácticas personalizadas a los valores de cada registro. Son códigos temporales, no nombres. No inventes identidades, correos, notas, diagnósticos ni información personal. Las notas numéricas son datos observados: no las conviertas a niveles cuando la correspondencia no sea explícita. No calcules nota final. Usa las rúbricas como orientación, con lenguaje respetuoso. Devuelve SOLO un array JSON con un elemento por id: {"id":"...","intro":"...","competencias_evaluadas":[{"nombre_competencia":"cabecera exacta","rubrica":"valoración","recomendaciones":"consejos concretos"}],"conclusion":"cierre motivador"}. Devuelve exactamente las competencias recibidas, y todos los ids una vez. No incluyas enlaces.\nRúbricas: '+JSON.stringify(rubrics)+'\nRegistros: '+JSON.stringify(validateRecords(records));
-  }
   function response(raw,records) {
     if(typeof raw!=='string'||raw.length>500000) throw new Error('Respuesta inválida.');
     const parsed=JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,''));
@@ -130,6 +127,6 @@
       return {id:p.id,intro:text(p.intro),competencias_evaluadas:values,conclusion:text(p.conclusion)};
     });
   }
-  const api={competencies,parseTSV,parseStudents,prepare,validateRecords,prompt,response};
+  const api={competencies,parseTSV,parseStudents,prepare,validateRecords,response};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.Feedback=Object.freeze(api);
 })(globalThis);

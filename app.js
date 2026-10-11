@@ -1,63 +1,67 @@
 'use strict';
-const frame=document.getElementById('editor');
-const connection=document.getElementById('connection');
-const models=new Set(['google/gemini-2.5-flash','google/gemini-3-flash-preview']);
-let ready=false,busy=false,epoch=0,loading;
-const button=document.getElementById('connect'),label=document.getElementById('connect-label'),spinner=document.getElementById('connect-spinner');
-function buttonState(text,working=false){label.textContent=text;spinner.hidden=!working;button.disabled=working;button.setAttribute('aria-busy',String(working));}
-function deadline(promise,ms){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject({code:'timeout'}),ms);})]).finally(()=>clearTimeout(timer));}
-function failureCode(error){
-  const code=String(error?.error?.code||error?.error||error?.code||'').toLowerCase();
-  if(['popup_blocked','auth_window_closed','unsupported_origin','timeout'].includes(code))return code;
-  if(/auth|unauthorized|token/.test(code))return 'auth';
-  if(/rate|quota|limit|fund|credit|balance/.test(code))return 'quota';
-  if(/model|not_found/.test(code))return 'model';
-  if(/network|fetch|connection/.test(code))return 'network';
-  return 'provider';
-}
-const authErrors={popup_blocked:'El navegador ha bloqueado la ventana de acceso. Permite las ventanas emergentes y pulsa Acceder.',auth_window_closed:'Se cerró la ventana de acceso sin completar la sesión. Pulsa Acceder para intentarlo de nuevo.',unsupported_origin:'Puter no admite este origen. Abre la web publicada por HTTPS.',timeout:'El acceso está tardando demasiado. Cierra la ventana anterior y vuelve a pulsar Acceder.'};
-function loadSDK(){
-  if(!loading) loading=new Promise((resolve,reject)=>{
-    const script=document.createElement('script');script.src='https://js.puter.com/v2/';
-    const timer=setTimeout(()=>{loading=null;script.remove();reject({code:'timeout'});},20000);
-    script.onload=()=>{clearTimeout(timer);resolve();};script.onerror=()=>{clearTimeout(timer);loading=null;script.remove();reject({code:'network'});};document.head.append(script);
-  });return loading;
-}
-button.addEventListener('click',async()=>{
-  connection.hidden=true;
-  const loadingSDK=!globalThis.puter;
-  try{
-    buttonState(loadingSDK?'Cargando servicio…':'Accediendo…',true);
-    if(loadingSDK){await loadSDK();buttonState('Acceder a Puter / Gemini');return;}
-    await deadline(puter.auth.signIn(),60000);ready=true;buttonState('Conectado con Puter / Gemini');
-  }catch(error){
-    ready=false;const code=failureCode(error);buttonState(globalThis.puter?'Acceder a Puter / Gemini':'Reintentar conexión');
-    connection.textContent=(authErrors[code]||'No se pudo conectar con Puter. Comprueba la conexión y vuelve a intentarlo.')+' [ACCESO_'+code.toUpperCase()+']';connection.hidden=false;
+const frame = document.getElementById('editor');
+const send = data => frame.contentWindow.postMessage(data, '*');
+function getRubricMatch(compName, score) {
+  const rubrics = globalThis.LOCAL_RUBRICS || [];
+  const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const target = norm(compName);
+
+  let found = rubrics.find(r => norm(r.name) === target);
+  if (!found) {
+    if (target.includes('innova')) found = rubrics.find(r => norm(r.name).includes('innovacion'));
+    else if (target.includes('emprend')) found = rubrics.find(r => norm(r.name).includes('emprendimiento'));
+    else if (target.includes('comunica')) found = rubrics.find(r => norm(r.name).includes('comunicacion oral'));
+    else if (target.includes('equipo')) found = rubrics.find(r => norm(r.name).includes('equipo'));
+    else if (target.includes('digital')) found = rubrics.find(r => norm(r.name).includes('digital'));
+    else if (target.includes('entorno') || target.includes('adaptaci')) found = rubrics.find(r => norm(r.name).includes('entorno'));
+    else if (target.includes('autonom')) found = rubrics.find(r => norm(r.name).includes('autonomia'));
+    else if (target.includes('responsa')) found = rubrics.find(r => norm(r.name).includes('responsabilidad'));
   }
-});
-frame.addEventListener('load',()=>{epoch++;busy=false;});
-function send(message){frame.contentWindow.postMessage(message,'*');}
-window.addEventListener('message',async event=>{
-  if(event.source!==frame.contentWindow||event.origin!=='null')return;
-  const data=event.data;
-  if(data?.type==='cancel'){epoch++;busy=false;return;}
-  if(data?.type!=='generate'||typeof data.request!=='string'||!models.has(data.model))return;
-  if(!ready||busy){send({type:'failure',request:data.request,code:!ready?'not_connected':'busy'});return;}
-  const run=++epoch;busy=true;let stage='request';
-  send({type:'progress',request:data.request,stage:'waiting'});
-  try{
-    const records=Feedback.validateRecords(data.records);
-    const stream=await puter.ai.chat(Feedback.prompt(records,RUBRICS),{model:data.model,stream:true,responseMimeType:'application/json'});
-    let raw='';
-    for await(const part of stream){
-      if(run!==epoch)return;
-      if(part?.error)throw part.error;
-      if(typeof part?.text==='string' && part.text){raw+=part.text;send({type:'progress',request:data.request,stage:'receiving'});}
-      if(raw.length>500000)throw new Error('Limit');
-    }
-    stage='response';send({type:'progress',request:data.request,stage:'validating'});
-    const result=Feedback.response(raw,records);
-    if(run===epoch)send({type:'result',request:data.request,result});
-  }catch(error){if(run===epoch)send({type:'failure',request:data.request,code:stage==='response'?'invalid_response':failureCode(error)});}
-  finally{if(run===epoch)busy=false;}
+
+  const val = Number(score) || 0;
+  let level = 1;
+  if (val >= 8.5) level = 4;
+  else if (val >= 7.0) level = 3;
+  else if (val >= 5.0) level = 2;
+  else level = 1;
+
+  const levelIdx = level - 1;
+  const descriptor = (found && Array.isArray(found.levels) && found.levels[levelIdx])
+    ? found.levels[levelIdx]
+    : `Nivel ${level}: Desempeño observado en ${compName} con calificación ${score}/10.`;
+
+  return { level, descriptor };
+}
+
+function getRubricDescriptor(compName, score) {
+  return getRubricMatch(compName, score).descriptor;
+}
+
+function getPedagogicalAdvice(compName, score) {
+  const suffix = globalThis.LOCAL_SETTINGS?.advice_suffix ?? 'Ajusta la dificultad y los apoyos con tu docente según las evidencias de aprendizaje.';
+  const action = AdviceBank.select(compName, Number(score), globalThis.LOCAL_ADVICE);
+  return `${action} ${suffix}`.trim();
+}
+
+
+window.addEventListener('message', event => {
+  if (event.source !== frame.contentWindow) return;
+  const data = event.data;
+  if (data?.type !== 'generate' || typeof data.request !== 'string') return;
+  const request = data.request;
+  try {
+    const records = Feedback.validateRecords(data.records);
+    if (!records.length || records.length > 40) throw new Error('Lote inválido');
+    const result = records.map(record => ({
+      id: record.id,
+      intro: globalThis.LOCAL_SETTINGS?.intro_text || 'A continuación se detalla la retroalimentación formativa de las competencias evaluadas en este periodo:',
+      competencias_evaluadas: record.competencias.map(c => ({
+        nombre_competencia: c.competencia,
+        rubrica: String(getRubricDescriptor(c.competencia, c.valor)).slice(0, 3000),
+        recomendaciones: String(getPedagogicalAdvice(c.competencia, c.valor)).slice(0, 3000)
+      })),
+      conclusion: globalThis.LOCAL_SETTINGS?.conclusion_text || 'Revisa estas propuestas con tu docente y elige un objetivo concreto para el próximo proyecto.'
+    }));
+    send({type: 'result', request, result: Feedback.response(JSON.stringify(result), records)});
+  } catch { send({type: 'failure', request, code: 'invalid_response'}); }
 });

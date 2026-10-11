@@ -1,95 +1,50 @@
-# Retroalimentación de competencias clave
+# CC-feedback sin inteligencia artificial
 
-Documentación actualizada: 9 de octubre de 2026. Mantiene **Gemini mediante Puter, recomendaciones personalizadas y preparación del borrador en Gmail**. La publicación del código no acredita autorización institucional de uso real.
+Rama `no-ia`, creada desde `puter-llm` con el banco local de 192 sugerencias. No integra SDK, autenticación, llamadas ni modelos de IA. Las otras ramas conservan sus variantes anteriores.
 
-## Adecuación al RGPD
+## Funcionamiento
 
-Documentación revisada el 9 de octubre de 2026 a partir de los diagramas del informe inicial y del código actual. Describe las medidas implementadas; la configuración y autorización de producción deben comprobarse aparte.
+1. Pega seis notas por alumno, con nombre y correo opcionales.
+2. Genera los borradores localmente: el código selecciona las valoraciones de rúbrica y las sugerencias por nivel.
+3. Abre cada borrador, revisa o edita su contenido y confirma la revisión.
+4. «Generar Gmail» abre el correo para su revisión final; no lo envía automáticamente.
+5. Borra los datos al terminar. También se retiran al salir o tras quince minutos sin actividad; suspender el equipo puede retrasarlo.
 
-CC-feedback incorpora minimización de datos y aislamiento del editor: la petición a Puter/Gemini contiene códigos aleatorios, competencias y notas, sin nombres ni correos del alumnado. Si se introducen solo notas, los identificadores de ejemplo se crean localmente. Esto reduce la posibilidad de identificación por el proveedor, pero si el docente conserva el orden o la hoja original para asignar las recomendaciones, el centro sigue tratando datos personales. Una cuenta genérica no garantiza anonimato: el proveedor trata también datos de cuenta y conexión. La posibilidad de identificación debe valorarse según los medios razonablemente disponibles. El borrado local no elimina peticiones recibidas por proveedores ni mensajes de Gmail.
+Se mantienen el editor aislado, las cabeceras opcionales, los borradores colapsados, Google corporativo para Administración y la configuración pedagógica en SQLite. Las ediciones invalidan la revisión anterior.
 
-Estos controles apoyan la adecuación al RGPD, pero no acreditan por sí solos el cumplimiento ni sustituyen la autorización del centro. Antes del uso con datos reales deben verificarse en el despliegue, completar la información de privacidad, revisar proveedores y condiciones de tratamiento y aprobar la conservación y el borrado, incluidas copias y exportaciones.
+## Privacidad y RGPD
 
-El aviso se mantiene en `privacidad.html`; GitHub Pages no carga variables de un archivo `.env`.
+Las notas y borradores se procesan en memoria del navegador, sin enviarse al servidor ni a proveedores de IA. La página principal bloquea conexiones de red mediante `connect-src 'none'` y solo admite scripts del propio origen. El editor conserva su sandbox y su política restrictiva. La base de datos almacena configuración pedagógica, no resultados del alumnado.
 
-[Guía de privacidad](docs/PRIVACIDAD_Y_ACTUALIZACION.md) · [Web](https://cuatrovientos-ci.github.io/cc-feedback/).
-
-## Flujo de funcionamiento y datos
+El servidor puede registrar datos de conexión. Google interviene en el acceso administrativo y, por acción expresa, al abrir Gmail: el destinatario y el texto pasan a Google en la URL. El borrado local no alcanza Gmail, historial, portapapeles ni copias externas, ni elimina sesiones o cachés dejadas por variantes anteriores. El procesamiento local no equivale a anonimización ni acredita por sí solo cumplimiento del RGPD. El centro debe completar la información de privacidad y validar finalidad, base jurídica, conservación, proveedores y autorización institucional antes del uso real.
 
 ```mermaid
 flowchart TD
-    P["GitHub Pages: aplicación estática"] --> E["Editor aislado en el navegador"]
-    N["Solo notas, o notas con nombre y correo opcionales"] --> E
-    E --> I["Identidades reales o de ejemplo: solo en el editor"]
-    E --> C["Códigos aleatorios, competencias y notas numéricas"]
-    C --> V["Contenedor valida campos permitidos"]
-    U["Cuenta y conexión con Puter"] --> AI["Puter y Gemini: recomendaciones"]
-    V --> AI
-    AI --> R["Validación completa de códigos y competencias"]
-    R --> E
-    I --> H["Asociación local y revisión docente del borrador"]
-    E --> H
-    H --> G["Acción expresa: abre Gmail con destinatario y texto en la URL"]
-    G --> M["Usuario revisa y envía desde Gmail"]
-    E --> X["Borrado local, cancelación, salida o inactividad; no borra datos del proveedor"]
+    A[Docente: tabla de notas] --> B[Editor aislado en el navegador]
+    B -->|Códigos temporales, competencias y notas| C[Motor local de rúbricas y 192 sugerencias]
+    C --> B
+    B --> D[Borrador editable y revisión docente]
+    D -->|Solo al pulsar Generar Gmail| E[Google: destinatario y correo]
+    F[Administración con Google corporativo] --> G[SQLite: rúbricas y configuración]
+    G --> C
 ```
 
+## Despliegue en PythonAnywhere
 
-## Datos separados antes de llamar a la IA
+Publica la rama completa y recarga la aplicación. `.env` se carga junto a `server.py`, con prioridad de las variables del proceso. Conserva `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SECRET_KEY` estable y `ADMIN_USER`. `DATABASE_PATH` relativo se resuelve desde el directorio de la aplicación. No se necesitan credenciales ni modelos de IA.
 
-1. `index.html` conecta con Puter. No contiene nombres, correos ni filas originales.
-2. `editor.html` recibe las filas dentro de un iframe aislado, con origen opaco (`sandbox` sin `allow-same-origin`). No carga Puter ni recursos remotos; su política impide conexiones de datos. El SDK del contenedor no puede leer su documento.
-3. Se validan las cabeceras y los valores. Se conservan nombre, correo y total dentro del editor; a cada fila se asigna un UUID nuevo para esa operación.
-4. Solo se comunican al contenedor `{id, competencias: [{competencia, valor}]}`. Este vuelve a construir una lista de campos permitidos antes de llamar a la IA. No hay envío de filas originales como alternativa ante errores.
-5. Gemini devuelve recomendaciones. Se exige una correspondencia completa de códigos y competencias, sin duplicados. La asociación local utiliza el código, nunca el orden de respuesta. Nombres, correos, notas y total mostrados proceden de la entrada docente, no del modelo.
-6. El docente revisa y adapta el borrador. Al editarlo se desmarca la revisión. Gmail se abre por una acción expresa y con el destinatario local; no se envía ningún correo automáticamente.
+No publiques la raíz del repositorio mediante mapeos estáticos: podrían exponer archivos privados o evitar las cabeceras de Flask. Verifica estilos, generación y acceso administrativo después de desplegar. La protección CSRF y el refuerzo de sesiones administrativas siguen pendientes de revisión.
 
-La separación de identificadores reduce la exposición de datos. Consulta el apartado de adecuación al RGPD para distinguir la información recibida por la IA de la correspondencia conservada por el docente.
+## Pruebas
 
-## Uso
+- `node --test tests/core.test.cjs tests/advice-bank.test.cjs`
+- `python tests/test_server.py`
+- `node tests/local.browser.cjs` (Playwright y navegador; `BROWSER_EXECUTABLE` permite elegir ejecutable).
 
-Servir los archivos por HTTPS (o localhost para pruebas), no abrirlos como `file://`.
+### Banco local de sugerencias
 
-1. Pulsar «Conectar con Puter / Gemini». La primera pulsación muestra «Cargando servicio…» y después cambia el propio botón a «Acceder a Puter / Gemini». La segunda inicia sesión y muestra «Accediendo…» hasta terminar.
-2. Pegar celdas tabuladas o texto sin cabecera: cabecera opcional, nombre opcional, Email opcional, seis competencias y Total opcional. Sin cabecera se admite texto separado por espacios o celdas tabuladas. Si falta el nombre se usa Alumno1, Alumno2, etc.; si falta el correo se usa alumno1@example.invalid, alumno2@example.invalid, etc., marcado como ejemplo.
-3. Se admiten las nueve subcompetencias originales: Innovación, Emprendimiento, Trabajo en equipo, Comunicación oral, Comunicación escrita, Competencia digital, Adaptación al entorno, Autonomía y Responsabilidad. También las seis cabeceras `Competency 1 Level` a `Competency 6 Level`, mapeadas a las seis categorías generales del prompt original.
-4. Introducir notas 0–10 (hasta dos decimales, coma o punto), sin texto libre. Las competencias vacías no se envían. No se admiten texto libre, diagnósticos ni columnas desconocidas. Las notas no se convierten automáticamente a niveles, porque la escala original dejaba huecos.
-5. Generar, revisar cada recomendación y destinatario y abrir Gmail con una cuenta institucional autorizada. Las recomendaciones siguen siendo redactadas por la IA, no son plantillas locales.
+`advice-bank.js` incorpora 192 propuestas editoriales: seis familias de competencias, cuatro niveles y ocho acciones distintas por grupo y nivel. Usa los mismos umbrales del motor de rúbricas: menos de 5; de 5 a menos de 7; de 7 a menos de 8,5; y de 8,5 a 10. Las subcompetencias utilizan su familia correspondiente.
 
-El iframe permite el evento local del formulario con `allow-forms`, mientras `form-action none` bloquea envíos nativos a servidores. Usa `allow-popups` y `allow-popups-to-escape-sandbox` para Gmail, con `noopener,noreferrer`; **no añadir `allow-same-origin`**, porque anularía el aislamiento frente al SDK del contenedor. El uso directo de `editor.html` no permite generar.
+La selección se hace en el navegador, sin llamadas a IA ni almacenamiento de notas. Cada grupo y nivel agota sus ocho propuestas antes de repetir; tampoco repite la última al empezar una nueva ronda. La secuencia se reinicia al recargar y no representa una evaluación adicional del alumno. Grupos de más de ocho alumnos con la misma competencia y nivel pueden recibir propuestas repetidas. El docente debe revisar la pertinencia de la actividad, especialmente cuando la nota agregada no refleja todas las subcompetencias.
 
-## Límites y conservación
-
-- Máximo 100 personas / 100.000 caracteres de entrada. Valores y cabeceras permitidos exclusivamente.
-- No se guardan identidades en cookies o almacenamiento web de la aplicación. La cuenta/sesión del SDK Puter tiene sus propias condiciones.
-- Las identidades se mantienen en memoria y en los borradores; se retiran al borrar, salir o tras 15 minutos de inactividad. La suspensión del navegador puede retrasar el temporizador; se comprueba también al volver a interactuar.
-- Cancelar descarta respuestas posteriores, pero no retira una petición ya recibida por Puter. El borrado local no asegura sobrescritura física ni borra copias externas.
-- Abrir Gmail incluye el texto y el destinatario en una URL de Google, como en la funcionalidad original. Es una transferencia identificada deliberada al canal de correo, distinta de la petición seudonimizada a IA. Puede quedar en historial/registros. La pantalla advierte antes de abrirlo.
-- El código externo del proveedor continúa siendo una dependencia de confianza para las peticiones seudonimizadas. El aislamiento no certifica anonimato ni cumplimiento legal.
-
-## Publicación, autorización y pruebas
-
-Ver [guía de actualización](docs/PRIVACIDAD_Y_ACTUALIZACION.md) y [privacidad](privacidad.html). La web sigue en GitHub Pages, no en PythonAnywhere. La migración en curso de las cinco aplicaciones de PythonAnywhere a Europa no incluye CC-feedback ni el portal.
-
-`node --test tests/core.test.cjs`: trece pruebas de separación, validación y correspondencia.
-
-`node tests/browser.cjs`: Playwright con Chromium instalado; opcional `CC_BROWSER` para la ruta de otro navegador Chromium. Prueba el SDK con una respuesta simulada, sin datos reales ni consumo de IA. Comprueba aislamiento, peticiones sin identificadores, recomendaciones, reordenación, revisión, Gmail, borrado y contenido malicioso. No sustituye una prueba real de autenticación y generación con una cuenta autorizada y datos ficticios.
-
-Archivos para publicar: `index.html`, `editor.html`, `core.js`, `app.js`, `editor.js`, `rubricas.js`, `style.css`, `shell.css`, `privacidad.html` y `assets/` (Bootstrap local y licencia). `prompt.toon` queda como referencia original; las rúbricas se sirven localmente desde `rubricas.js`. No subir hojas ni capturas con datos reales.
-
-### Entrada sin cabecera
-
-Orden fijo: Nombre (opcional), Innovación y Emprendimiento, Trabajo en Equipo, Capacidad Comunicativa, Competencia Digital, Adaptación al Entorno, Autonomía y Responsabilidad y Total (opcional). El correo, si se incluye sin cabecera, va después del nombre. El total ausente no se calcula.
-
-```text
-Alumno1 5 5 6 4 6 7
-Alumno2 6 5 4 3 4 5
-```
-
-También se admite pegar solo las seis notas: el nombre y correo de ejemplo se generan localmente. Con cabecera tabulada se reconocen los nombres numerados del 1 al 6, con o sin acentos, y pueden omitirse las columnas Nombre y Email. Sustituir el correo de ejemplo en Gmail antes de enviar. Las direcciones example.invalid no son destinatarios reales.
-
-### Estado visible y revisión compacta
-
-Durante la generación se muestra una capa con indicador de actividad, fase (espera, recepción o comprobación), segundos transcurridos y Cancelar. No indica un porcentaje inventado. Los fallos muestran una explicación y un código de diagnóstico controlado, sin reproducir datos del proveedor; conservan la entrada en el editor para corregir o reintentar. Borrar o cancelar sí retira los datos locales; no retira una petición ya recibida por el proveedor.
-
-Los resultados aparecen colapsados por persona, con nombre y correo. Pulsar Revisar borrador abre el texto editable y la confirmación necesaria para preparar Gmail. Editar el texto vuelve a exigir revisión. Los mensajes de acceso normales aparecen en el propio botón; solo los errores aparecen aparte.
+Se conservan las rúbricas y los textos configurados en Administración. Los seis consejos de instalación originales, reconocidos por su patrón y texto exactos, dejan paso al banco; un consejo nuevo o modificado coincidente tiene prioridad (el primero en el orden configurado), para todos los niveles. El banco se muestra y edita en Administración → Consejos, por competencia y nivel. Se almacena en la tabla `advice_bank` de SQLite. La inicialización incorpora las 192 entradas de `advice-bank.seed.json` sin sobrescribir ediciones existentes. `advice-bank.js` conserva un catálogo de respaldo. Tras guardar, recarga la aplicación para generar nuevos borradores con los cambios; los borradores abiertos no se modifican. Incluye el archivo de semillas al desplegar y conserva una copia de la base de datos.
