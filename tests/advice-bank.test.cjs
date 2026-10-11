@@ -31,13 +31,14 @@ test('every family and level exhausts its variants before repeating, including c
     });
   });
 });
-test('custom admin advice wins; seed entries and invalid patterns do not mask the bank', () => {
-  const select = createSelector();
-  const seed = { pattern: 'equipo', advice: 'Acuerda con el equipo una tarea, un plazo y una forma de revisar juntos su cumplimiento.' };
-  assert.ok(bank.teamwork[0].includes(select(names[1], 2, [seed])));
-  const custom = { pattern: 'equipo', advice: 'Consejo propio del centro.' };
-  for (const grade of [2, 5, 7, 9]) assert.equal(select(names[1], grade, [seed, { pattern: '[' , advice: 'Incorrecto' }, custom]), custom.advice);
-  assert.ok(bank.digital[2].includes(select(names[3], 7, null)));
+test('legacy general advice cannot override random selection', () => {
+  const select = createSelector(() => 0.25);
+  const values = Array.from({length:8}, () => select('Trabajo en equipo', 6, [{pattern:'equipo', advice:'Consejo fijo anterior.'}]));
+  assert.equal(new Set(values).size, 8);
+  assert.ok(values.every(value => bank.teamwork[1].includes(value)));
+});
+test('different random draws change the first suggestion', () => {
+  assert.notEqual(createSelector(() => 0)('Trabajo en equipo', 6), createSelector(() => 0.99)('Trabajo en equipo', 6));
 });
 test('individual subcompetencies map to their families', () => {
   const select = createSelector();

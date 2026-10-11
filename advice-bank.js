@@ -261,15 +261,6 @@
     [/comunica/, 'communication'], [/digital/, 'digital'],
     [/entorno|adaptaci/, 'adaptation'], [/autonom|responsa/, 'autonomy']
   ];
-  // Only the original, unedited seed entries defer to the new catalogue.
-  const legacy = new Map([
-    ['innova|emprend', 'Propón dos soluciones a un problema del proyecto y compara sus ventajas antes de elegir una.'],
-    ['equipo', 'Acuerda con el equipo una tarea, un plazo y una forma de revisar juntos su cumplimiento.'],
-    ['comunica', 'Prepara una exposición con introducción, dos ideas principales y cierre; solicita una sugerencia de mejora.'],
-    ['digital', 'Contrasta una fuente digital y comprueba el resultado de una herramienta antes de incorporarlo al trabajo.'],
-    ['entorno|adaptaci', 'Ante un cambio del proyecto, anota dos alternativas y explica cómo adaptarías tu planificación.'],
-    ['autonom|responsa', 'Planifica las entregas con una lista semanal y reserva un momento para revisar tus avances.']
-  ]);
   const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   function level(score) {
     if (typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 10) throw new RangeError('Nota fuera de 0–10');
@@ -277,14 +268,9 @@
   }
   function createSelector(random = Math.random) {
     const bags = new Map();
-    return function select(name, score, custom = []) {
+    return function select(name, score) {
       const tier = level(score);
       const normalized = normalize(name);
-      for (const item of Array.isArray(custom) ? custom : []) {
-        if (!item || typeof item.advice !== 'string' || !item.advice.trim() || typeof item.pattern !== 'string') continue;
-        if (legacy.get(item.pattern) === item.advice) continue;
-        try { if (new RegExp(item.pattern, 'i').test(normalized)) return item.advice.trim(); } catch { /* Ignore invalid admin patterns. */ }
-      }
       const group = groups.find(([pattern]) => pattern.test(normalized))?.[1];
       if (!group) return 'Elige con tu docente una actividad y acuerda cómo comprobar el progreso.';
       const key = `${group}:${tier}`;

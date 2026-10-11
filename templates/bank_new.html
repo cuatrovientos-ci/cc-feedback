@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Nueva sugerencia{% endblock %}
+{% block content %}
+<div class="card p-4 mx-auto" style="max-width:850px">
+<h2>Nueva sugerencia</h2><p>Se elegirá aleatoriamente junto con las demás de su competencia y nivel. No incluyas datos personales.</p>
+<form method="POST">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="legacy_id" value="{{ legacy_id }}">
+<label for="family">Competencia</label><select id="family" name="family" class="form-select mb-3" required><option value="">Selecciona una competencia</option>{% for key,label in families.items() %}<option value="{{ key }}" {% if family == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+<label for="level">Nivel</label><select id="level" name="level" class="form-select mb-3" required><option value="">Selecciona un nivel</option>{% for label in levels %}<option value="{{ loop.index }}" {% if level == loop.index|string %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+<label for="advice">Sugerencia</label><textarea id="advice" name="advice" class="form-control mb-3" rows="5" minlength="20" maxlength="1000" required>{{ advice }}</textarea>
+<a class="btn btn-outline-secondary" href="{{ url_for('admin_recommendations') }}">Cancelar</a><button class="btn btn-success">Guardar sugerencia</button>
+</form></div>{% endblock %}
