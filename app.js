@@ -101,31 +101,8 @@ function getRubricDescriptor(compName, score) {
 }
 
 function getPedagogicalAdvice(compName, score) {
-  const c = compName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const customAdvice = globalThis.LOCAL_ADVICE;
-  const suffix = globalThis.LOCAL_SETTINGS?.advice_suffix || 'Ajusta la dificultad y los apoyos con tu docente según las evidencias de aprendizaje.';
-  
-  if (Array.isArray(customAdvice) && customAdvice.length > 0) {
-    for (const item of customAdvice) {
-      try {
-        const regex = new RegExp(item.pattern, 'i');
-        if (regex.test(c)) {
-          return `${item.advice} ${suffix}`.trim();
-        }
-      } catch {}
-    }
-  }
-
-  const exercises = [
-    [/innova|emprend/, 'Propón dos soluciones a un problema del proyecto y compara sus ventajas antes de elegir una.'],
-    [/equipo/, 'Acuerda con el equipo una tarea, un plazo y una forma de revisar juntos su cumplimiento.'],
-    [/comunica/, 'Prepara una exposición con introducción, dos ideas principales y cierre; solicita una sugerencia de mejora.'],
-    [/digital/, 'Contrasta una fuente digital y comprueba el resultado de una herramienta antes de incorporarlo al trabajo.'],
-    [/entorno|adaptaci/, 'Ante un cambio del proyecto, anota dos alternativas y explica cómo adaptarías tu planificación.'],
-    [/autonom|responsa/, 'Planifica las entregas con una lista semanal y reserva un momento para revisar tus avances.']
-  ];
-  const action = exercises.find(([pattern]) => pattern.test(c))?.[1]
-    || `Elige con tu docente una actividad de ${compName} y acuerda cómo comprobar el progreso.`;
+  const suffix = globalThis.LOCAL_SETTINGS?.advice_suffix ?? 'Ajusta la dificultad y los apoyos con tu docente según las evidencias de aprendizaje.';
+  const action = AdviceBank.select(compName, Number(score), globalThis.LOCAL_ADVICE);
   return `${action} ${suffix}`.trim();
 }
 

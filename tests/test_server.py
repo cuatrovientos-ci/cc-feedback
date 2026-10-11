@@ -13,7 +13,7 @@ class ServerTests(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory()
         cls.root = Path(cls.temp.name)
         source = Path(__file__).resolve().parents[1]
-        for name in ['server.py','index.html','editor.html','editor.js','app.js','core.js','model-config.js','rubricas.js','style.css','shell.css','privacidad.html']:
+        for name in ['server.py','index.html','editor.html','editor.js','app.js','core.js','model-config.js','advice-bank.js','rubricas.js','style.css','shell.css','privacidad.html']:
             shutil.copy2(source/name, cls.root/name)
         shutil.copytree(source/'templates', cls.root/'templates')
         shutil.copytree(source/'assets', cls.root/'assets')
@@ -53,7 +53,7 @@ class ServerTests(unittest.TestCase):
         for path in ['/.env','/.env.example','/feedback.db','/server.py','/database.py','/wsgi.py','/templates/login.html','/assets/../.env','/assets/.secret']:
             with self.subTest(path=path): self.assertEqual(self.client.get(path).status_code,404)
     def test_public_resources_work_for_opaque_editor(self):
-        for path in ['/style.css','/assets/bootstrap.min.css','/assets/cuatrovientos.png','/editor.js','/rubricas.js']:
+        for path in ['/style.css','/assets/bootstrap.min.css','/assets/cuatrovientos.png','/editor.js','/rubricas.js','/advice-bank.js']:
             response=self.client.get(path)
             with self.subTest(path=path):
                 self.assertEqual(response.status_code,200)

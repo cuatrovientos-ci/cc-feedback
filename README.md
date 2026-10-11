@@ -72,3 +72,16 @@ Los mapeos estáticos de PythonAnywhere pueden omitir cabeceras Flask. Nunca pub
 - `python tests/test_server.py`: usa una copia temporal y una base de datos simulada; comprueba `.env`, archivos privados y cabeceras.
 
 Las pruebas simuladas no acreditan disponibilidad, calidad, velocidad, cuotas ni condiciones del servicio real. Antes de publicar, prueba una fila ficticia con una cuenta autorizada. El informe Word y el portal común describen la variante local y no cambian automáticamente por crear esta rama.
+
+
+### Banco local de sugerencias
+
+`advice-bank.js` incorpora 192 propuestas editoriales: seis familias de competencias, cuatro niveles y ocho acciones distintas por grupo y nivel. Usa los mismos umbrales del motor de rúbricas: menos de 5; de 5 a menos de 7; de 7 a menos de 8,5; y de 8,5 a 10. Las subcompetencias utilizan su familia correspondiente.
+
+La selección se hace en el navegador, sin llamadas a IA ni almacenamiento de notas. Cada grupo y nivel agota sus ocho propuestas antes de repetir; tampoco repite la última al empezar una nueva ronda. La secuencia se reinicia al recargar y no representa una evaluación adicional del alumno. Grupos de más de ocho alumnos con la misma competencia y nivel pueden recibir propuestas repetidas. El docente debe revisar la pertinencia de la actividad, especialmente cuando la nota agregada no refleja todas las subcompetencias.
+
+Se conservan las rúbricas y los textos configurados en Administración. Los seis consejos de instalación originales, reconocidos por su patrón y texto exactos, dejan paso al banco; un consejo nuevo o modificado coincidente tiene prioridad (el primero en el orden configurado), para todos los niveles. No se modifica ni migra la base de datos. Las propuestas del banco se editan en `advice-bank.js`.
+
+**Privacidad:** generar borradores con este banco no comunica notas a Puter. La mejora opcional con Puter sigue siendo externa y requiere su evaluación específica: el banco no convierte esa opción en procesamiento local ni acredita por sí solo cumplimiento del RGPD. No se necesita conectar con Puter para utilizar las 192 propuestas.
+
+Verificación del catálogo: `node --test tests/advice-bank.test.cjs`.

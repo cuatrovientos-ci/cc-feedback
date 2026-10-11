@@ -77,7 +77,7 @@ def dynamic_rubricas_js():
 def static_files(filename):
     public_files = {
         'index.html', 'editor.html', 'privacidad.html', 'app.js', 'editor.js',
-        'core.js', 'model-config.js', 'style.css', 'shell.css',
+        'core.js', 'model-config.js', 'advice-bank.js', 'style.css', 'shell.css',
     }
     parts = filename.replace('\\', '/').split('/')
     is_asset = (parts[0] == 'assets' and all(part and not part.startswith('.') for part in parts)
