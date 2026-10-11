@@ -1,6 +1,8 @@
 import sqlite3
 import os
 import json
+import re
+import unicodedata
 
 DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'feedback.db')
 
@@ -202,6 +204,8 @@ def init_db(db_path=None):
                     VALUES (?, ?, ?, ?)
                 ''', (rec['pattern'], rec['label'], rec['advice'], idx))
                 
+        migrate_general_advice(conn)
+
         # Seed settings if empty
         for k, v in DEFAULT_SETTINGS.items():
             cursor.execute('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', (k, v))
@@ -308,31 +312,19 @@ def build_rubricas_js_content(db_path=None):
             "levels": [r["level1"], r["level2"], r["level3"], r["level4"]]
         })
         
-    recommendations_rows = get_all_recommendations(db_path)
-    advice = []
-    for rec in recommendations_rows:
-        advice.append({
-            "pattern": rec["pattern"],
-            "label": rec["label"],
-            "advice": rec["advice"]
-        })
-        
     settings = get_settings(db_path)
     
     rubrics_json = json.dumps(rubrics, ensure_ascii=False, indent=2)
-    advice_json = json.dumps(advice, ensure_ascii=False, indent=2)
     settings_json = json.dumps(settings, ensure_ascii=False, indent=2)
     
     return f"""'use strict';
 // Generado automáticamente desde SQLite (feedback.db)
 const RUBRICS = {rubrics_json};
-const ADVICE = {advice_json};
 const SETTINGS = {settings_json};
 
 if (typeof module !== 'undefined' && module.exports) module.exports = RUBRICS;
 
 globalThis.LOCAL_RUBRICS = RUBRICS;
-globalThis.LOCAL_ADVICE = ADVICE;
 globalThis.LOCAL_SETTINGS = SETTINGS;
 globalThis.LOCAL_ADVICE_BANK = {json.dumps(get_advice_bank(db_path), ensure_ascii=False)};
 """
@@ -363,4 +355,56 @@ def update_bank_advice(family, level, position, advice, db_path=None):
         updated = conn.execute('UPDATE advice_bank SET advice = ? WHERE family = ? AND level = ? AND position = ?', (advice, family, level, position))
         if updated.rowcount != 1:
             raise ValueError('Sugerencia no encontrada.')
+    export_to_rubricas_js(db_path)
+
+
+BANK_NAMES = {
+    'innovation': ['Innovación y emprendimiento', 'Innovación', 'Emprendimiento'],
+    'teamwork': ['Trabajo en equipo'],
+    'communication': ['Capacidad comunicativa', 'Comunicación oral', 'Comunicación escrita'],
+    'digital': ['Competencia digital'],
+    'adaptation': ['Adaptación al entorno'],
+    'autonomy': ['Autonomía y responsabilidad', 'Autonomía', 'Responsabilidad']
+}
+
+
+def migrate_general_advice(conn):
+    conn.execute('CREATE TABLE IF NOT EXISTS advice_migrations (rec_id INTEGER PRIMARY KEY)')
+    seeds = {(r['pattern'], r['advice']) for r in DEFAULT_RECOMMENDATIONS}
+    for row in conn.execute('SELECT * FROM recommendations WHERE id NOT IN (SELECT rec_id FROM advice_migrations)').fetchall():
+        if (row['pattern'], row['advice']) in seeds:
+            conn.execute('INSERT INTO advice_migrations VALUES (?)', (row['id'],))
+            continue
+        try:
+            pattern = re.compile(row['pattern'], re.I)
+            families = [key for key, names in BANK_NAMES.items() if any(pattern.search(''.join(c for c in unicodedata.normalize('NFD', name.lower()) if not unicodedata.combining(c))) for name in names)]
+        except re.error:
+            families = []
+        if not families:
+            continue  # Keep the original visible for manual classification; never discard it.
+        for family in families:
+            for level in range(1, 5):
+                if not conn.execute('SELECT 1 FROM advice_bank WHERE family=? AND level=? AND advice=?', (family, level, row['advice'])).fetchone():
+                    position = conn.execute('SELECT COALESCE(MAX(position),0)+1 FROM advice_bank WHERE family=? AND level=?', (family, level)).fetchone()[0]
+                    conn.execute('INSERT INTO advice_bank VALUES (?,?,?,?)', (family, level, position, row['advice']))
+        conn.execute('INSERT INTO advice_migrations VALUES (?)', (row['id'],))
+
+
+def pending_advice_migration(db_path=None):
+    with get_db(db_path) as conn:
+        return [dict(r) for r in conn.execute('SELECT * FROM recommendations WHERE id NOT IN (SELECT rec_id FROM advice_migrations)')]
+
+
+def add_bank_advice(family, level, advice, legacy_id=None, db_path=None):
+    advice = advice.strip()
+    if family not in BANK_NAMES or level not in range(1, 5):
+        raise ValueError('Selecciona una competencia y un nivel válidos.')
+    if not 20 <= len(advice) <= 1000:
+        raise ValueError('Escribe entre 20 y 1000 caracteres.')
+    with get_db(db_path) as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        position = conn.execute('SELECT COALESCE(MAX(position),0)+1 FROM advice_bank WHERE family=? AND level=?', (family, level)).fetchone()[0]
+        conn.execute('INSERT INTO advice_bank VALUES (?,?,?,?)', (family, level, position, advice))
+        if legacy_id:
+            conn.execute('INSERT OR IGNORE INTO advice_migrations VALUES (?)', (legacy_id,))
     export_to_rubricas_js(db_path)

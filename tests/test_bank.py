@@ -43,5 +43,36 @@ class BankTests(ServerTests):
         with self.client.session_transaction() as sess:
             sess.clear()
 
+    def test_custom_migration_and_new_suggestion(self):
+        advice = 'Revisa con el equipo los acuerdos y documenta una mejora concreta.'
+        with self.db.get_db() as conn:
+            conn.execute("INSERT INTO recommendations (pattern,label,advice) VALUES ('equipo','Equipo',?)", (advice,))
+            conn.execute("INSERT INTO recommendations (pattern,label,advice) VALUES ('[','Sin clasificar',?)", (advice,))
+        self.db.init_db()
+        self.db.init_db()
+        for variants in self.db.get_advice_bank()['teamwork']:
+            self.assertEqual(variants.count(advice), 1)
+        pending = self.db.pending_advice_migration()
+        self.assertEqual(len(pending), 1)
+        with self.client.session_transaction() as sess:
+            sess['logged_in'] = True
+        page = self.client.get('/admin/recommendations')
+        self.assertEqual(page.status_code, 200)
+        self.assertNotIn('sustituciones', page.get_data(as_text=True))
+        self.assertEqual(self.client.get('/admin/recommendations/new').status_code, 200)
+        with self.client.session_transaction() as sess:
+            token = sess['bank_csrf']
+        data = {'family':'digital', 'level':'3', 'advice':advice, 'legacy_id':str(pending[0]['id'])}
+        self.assertEqual(self.client.post('/admin/recommendations/new', data=data).status_code, 400)
+        data['csrf_token'] = token
+        self.assertEqual(self.client.post('/admin/recommendations/new', data=data).status_code, 302)
+        self.assertIn(advice, self.db.get_advice_bank()['digital'][2])
+        self.assertEqual(self.db.pending_advice_migration(), [])
+        data.pop('legacy_id')
+        data['level']='9'
+        self.assertEqual(self.client.post('/admin/recommendations/new', data=data).status_code, 200)
+        with self.client.session_transaction() as sess:
+            sess.clear()
+
 if __name__ == '__main__':
     unittest.main()

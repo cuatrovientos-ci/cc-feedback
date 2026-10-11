@@ -39,7 +39,7 @@ function getRubricDescriptor(compName, score) {
 
 function getPedagogicalAdvice(compName, score) {
   const suffix = globalThis.LOCAL_SETTINGS?.advice_suffix ?? 'Ajusta la dificultad y los apoyos con tu docente según las evidencias de aprendizaje.';
-  const action = AdviceBank.select(compName, Number(score), globalThis.LOCAL_ADVICE);
+  const action = AdviceBank.select(compName, Number(score));
   return `${action} ${suffix}`.trim();
 }
 

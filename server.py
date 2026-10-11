@@ -235,7 +235,7 @@ def admin_dashboard():
     return render_template('dashboard.html',
                            active_page='dashboard',
                            rubrics_count=len(rubrics),
-                           recommendations_count=len(recs),
+                           recommendations_count=sum(len(v) for tiers in database.get_advice_bank().values() for v in tiers),
                            db_path=db_path,
                            admin_user=session.get('username', ''),
                            admin_name=session.get('name', 'Administrador'),
@@ -353,79 +353,34 @@ def admin_bank_edit(family, level, position):
             flash(str(error), 'danger')
     return render_template('bank_form.html', active_page='recommendations', family=BANK_FAMILIES[family], level=BANK_LEVELS[level - 1], position=position, advice=advice, csrf_token=session['bank_csrf'])
 
-# --- CRUD Consejos Pedagógicos ---
-
+# --- Unified suggestions by competency and level ---
 @app.route('/admin/recommendations')
 @login_required
 def admin_recommendations():
-    recs = database.get_all_recommendations()
-    return render_template('recommendations.html', active_page='recommendations', recommendations=recs, bank=database.get_advice_bank(), families=BANK_FAMILIES, levels=BANK_LEVELS)
+    bank = database.get_advice_bank()
+    return render_template('recommendations.html', active_page='recommendations', bank=bank, families=BANK_FAMILIES, levels=BANK_LEVELS, total=sum(len(v) for tiers in bank.values() for v in tiers), pending=database.pending_advice_migration())
 
 @app.route('/admin/recommendations/new', methods=['GET', 'POST'])
 @login_required
 def admin_recommendation_new():
+    session.setdefault('bank_csrf', secrets.token_urlsafe(32))
+    pending = {str(r['id']): r for r in database.pending_advice_migration()}
+    legacy_id = request.values.get('legacy_id', '')
+    if legacy_id and legacy_id not in pending:
+        abort(404)
+    advice = request.form.get('advice', pending.get(legacy_id, {}).get('advice', ''))
+    family = request.form.get('family', request.args.get('family', ''))
+    level = request.form.get('level', request.args.get('level', ''))
     if request.method == 'POST':
-        label = request.form.get('label', '').strip()
-        pattern = request.form.get('pattern', '').strip()
-        advice = request.form.get('advice', '').strip()
-        display_order = int(request.form.get('display_order', 0) or 0)
-
-        if not label or not pattern or not advice:
-            flash('Todos los campos son obligatorios.', 'danger')
-        else:
-            try:
-                database.save_recommendation({
-                    'label': label,
-                    'pattern': pattern,
-                    'advice': advice,
-                    'display_order': display_order
-                })
-                flash(f'Consejo para "{label}" creado correctamente y sincronizado.', 'success')
-                return redirect(url_for('admin_recommendations'))
-            except Exception as e:
-                flash(f'Error al guardar el consejo: {e}', 'danger')
-
-    return render_template('recommendation_form.html', active_page='recommendations', rec=None)
-
-@app.route('/admin/recommendations/<int:rec_id>/edit', methods=['GET', 'POST'])
-@login_required
-def admin_recommendation_edit(rec_id):
-    rec = database.get_recommendation_by_id(rec_id)
-    if not rec:
-        flash('Consejo pedagógico no encontrado.', 'warning')
-        return redirect(url_for('admin_recommendations'))
-
-    if request.method == 'POST':
-        label = request.form.get('label', '').strip()
-        pattern = request.form.get('pattern', '').strip()
-        advice = request.form.get('advice', '').strip()
-        display_order = int(request.form.get('display_order', 0) or 0)
-
-        if not label or not pattern or not advice:
-            flash('Todos los campos son obligatorios.', 'danger')
-        else:
-            try:
-                database.save_recommendation({
-                    'label': label,
-                    'pattern': pattern,
-                    'advice': advice,
-                    'display_order': display_order
-                }, rec_id=rec_id)
-                flash(f'Consejo para "{label}" actualizado y sincronizado.', 'success')
-                return redirect(url_for('admin_recommendations'))
-            except Exception as e:
-                flash(f'Error al actualizar: {e}', 'danger')
-
-    return render_template('recommendation_form.html', active_page='recommendations', rec=rec)
-
-@app.route('/admin/recommendations/<int:rec_id>/delete', methods=['POST'])
-@login_required
-def admin_recommendation_delete(rec_id):
-    rec = database.get_recommendation_by_id(rec_id)
-    if rec:
-        database.delete_recommendation(rec_id)
-        flash(f'Consejo "{rec["label"]}" eliminado correctamente.', 'info')
-    return redirect(url_for('admin_recommendations'))
+        if not secrets.compare_digest(session['bank_csrf'], request.form.get('csrf_token', '')):
+            abort(400)
+        try:
+            database.add_bank_advice(family, int(level), advice, int(legacy_id) if legacy_id else None)
+            flash('Sugerencia añadida. Recarga la aplicación para utilizar el banco actualizado.', 'success')
+            return redirect(url_for('admin_recommendations', _anchor='bank-' + family))
+        except (ValueError, TypeError) as error:
+            flash(str(error), 'danger')
+    return render_template('bank_new.html', active_page='recommendations', advice=advice, family=family, level=str(level), families=BANK_FAMILIES, levels=BANK_LEVELS, legacy_id=legacy_id, csrf_token=session['bank_csrf'])
 
 # --- Ajustes de Textos Globales ---
 
