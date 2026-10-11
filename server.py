@@ -4,7 +4,7 @@ import secrets
 import urllib.parse
 from functools import wraps
 import requests
-from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, Response, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, Response, jsonify, abort
 from dotenv import load_dotenv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,8 +37,7 @@ app.secret_key = SECRET_KEY
 
 @app.after_request
 def add_security_headers(response):
-    # Puter authentication needs its cross-origin popup. The editor keeps its sandbox.
-    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin-allow-popups' if request.path in {'/', '/index.html'} else 'same-origin'
+    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
     response.headers['Cross-Origin-Embedder-Policy'] = 'unsafe-none'
     # The sandboxed editor has an opaque origin. Only public assets may opt in.
     if request.endpoint in {'static_files', 'dynamic_rubricas_js'} and response.status_code < 400:
@@ -71,13 +70,13 @@ def index():
 @app.route('/rubricas.js')
 def dynamic_rubricas_js():
     content = database.build_rubricas_js_content()
-    return Response(content, mimetype='application/javascript; charset=utf-8')
+    return Response(content, mimetype='application/javascript; charset=utf-8', headers={'Cache-Control': 'no-store'})
 
 @app.route('/<path:filename>')
 def static_files(filename):
     public_files = {
         'index.html', 'editor.html', 'privacidad.html', 'app.js', 'editor.js',
-        'core.js', 'model-config.js', 'advice-bank.js', 'style.css', 'shell.css',
+        'core.js', 'advice-bank.js', 'style.css', 'shell.css',
     }
     parts = filename.replace('\\', '/').split('/')
     is_asset = (parts[0] == 'assets' and all(part and not part.startswith('.') for part in parts)
@@ -331,13 +330,36 @@ def admin_rubric_delete(rubric_id):
         flash(f'Rúbrica "{rubric["name"]}" eliminada correctamente.', 'info')
     return redirect(url_for('admin_rubrics'))
 
+BANK_FAMILIES = {'innovation': 'Innovación y emprendimiento', 'teamwork': 'Trabajo en equipo', 'communication': 'Capacidad comunicativa', 'digital': 'Competencia digital', 'adaptation': 'Adaptación al entorno', 'autonomy': 'Autonomía y responsabilidad'}
+BANK_LEVELS = ['Nivel 1 · menos de 5', 'Nivel 2 · de 5 a menos de 7', 'Nivel 3 · de 7 a menos de 8,5', 'Nivel 4 · de 8,5 a 10']
+
+@app.route('/admin/bank/<family>/<int:level>/<int:position>/edit', methods=['GET', 'POST'])
+@login_required
+def admin_bank_edit(family, level, position):
+    bank = database.get_advice_bank()
+    if family not in BANK_FAMILIES or family not in bank or not 1 <= level <= 4 or not 1 <= position <= len(bank[family][level - 1]):
+        abort(404)
+    session.setdefault('bank_csrf', secrets.token_urlsafe(32))
+    advice = bank[family][level - 1][position - 1]
+    if request.method == 'POST':
+        if not secrets.compare_digest(session['bank_csrf'], request.form.get('csrf_token', '')):
+            abort(400)
+        advice = request.form.get('advice', '').strip()
+        try:
+            database.update_bank_advice(family, level, position, advice)
+            flash('Sugerencia guardada. Recarga la aplicación para usarla en los próximos borradores. Los borradores abiertos no cambian.', 'success')
+            return redirect(url_for('admin_recommendations', _anchor='bank-' + family))
+        except ValueError as error:
+            flash(str(error), 'danger')
+    return render_template('bank_form.html', active_page='recommendations', family=BANK_FAMILIES[family], level=BANK_LEVELS[level - 1], position=position, advice=advice, csrf_token=session['bank_csrf'])
+
 # --- CRUD Consejos Pedagógicos ---
 
 @app.route('/admin/recommendations')
 @login_required
 def admin_recommendations():
     recs = database.get_all_recommendations()
-    return render_template('recommendations.html', active_page='recommendations', recommendations=recs)
+    return render_template('recommendations.html', active_page='recommendations', recommendations=recs, bank=database.get_advice_bank(), families=BANK_FAMILIES, levels=BANK_LEVELS)
 
 @app.route('/admin/recommendations/new', methods=['GET', 'POST'])
 @login_required

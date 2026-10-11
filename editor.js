@@ -7,59 +7,9 @@ const form = document.getElementById('main-form'),
   loading = document.getElementById('loading-overlay');
 
 let pendingInput = '', elapsedTimer, started = 0;
-let identities = new Map(), records = [], request = null, currentEnhanceRequest = null, last = Date.now(), timeout;
-const studentCards = new Map();
-let enhancementChanges = 0;
+let identities = new Map(), records = [], request = null, last = Date.now(), timeout;
 
 function send(data) { parent.postMessage(data, '*'); }
-
-function updateSelectedCount() {
-  const checked = list.querySelectorAll('.ai-select-check:checked').length;
-  const countEl = document.getElementById('selected-count');
-  if (countEl) countEl.textContent = checked;
-  const runBtn = document.getElementById('run-selected-ai');
-  if (runBtn && !currentEnhanceRequest) runBtn.disabled = checked === 0;
-}
-
-function setAiButtonsDisabled(disabled) {
-  const runBtn = document.getElementById('run-selected-ai');
-  const selAll = document.getElementById('select-all-ai');
-  const deselAll = document.getElementById('deselect-all-ai');
-  if (runBtn) runBtn.disabled = disabled;
-  if (selAll) selAll.disabled = disabled;
-  if (deselAll) deselAll.disabled = disabled;
-  list.querySelectorAll('.btn-ai-single').forEach(b => { b.disabled = disabled; });
-  list.querySelectorAll('.ai-select-check').forEach(c => { c.disabled = disabled; });
-}
-
-function runEnhanceBatch(targetRecords) {
-  if (currentEnhanceRequest) return;
-  if (parent === window) {
-    const statusEl = document.getElementById('ai-batch-status');
-    if (statusEl) statusEl.textContent = 'Abre index.html para usar el motor de IA.';
-    return;
-  }
-  currentEnhanceRequest = crypto.randomUUID();
-  enhancementChanges = 0;
-  setAiButtonsDisabled(true);
-  const statusEl = document.getElementById('ai-batch-status');
-  if (statusEl) {
-    statusEl.className = 'small mt-2 text-primary';
-    statusEl.textContent = `Iniciando mejora con IA para ${targetRecords.length} alumno(s)...`;
-  }
-  for (const r of targetRecords) {
-    const cardObj = studentCards.get(r.id);
-    if (cardObj) {
-      cardObj.methodBadge.textContent = 'En cola para IA... ⏳';
-      cardObj.methodBadge.className = 'badge bg-warning text-dark border method-badge';
-    }
-  }
-  send({
-    type: 'enhance-batch',
-    request: currentEnhanceRequest,
-    records: targetRecords
-  });
-}
 
 function reset(message = '') {
   last = Date.now();
@@ -68,10 +18,8 @@ function reset(message = '') {
   form.setAttribute('aria-busy', 'false');
   clearTimeout(timeout);
   request = null;
-  currentEnhanceRequest = null;
   identities.clear();
   records = [];
-  studentCards.clear();
   input.value = '';
   list.querySelectorAll('textarea').forEach(t => t.value = '');
   list.replaceChildren();
@@ -79,18 +27,13 @@ function reset(message = '') {
   loading.style.display = 'none';
   form.style.display = 'block';
   status.textContent = message;
-  const batchStatus = document.getElementById('ai-batch-status');
-  if (batchStatus) { batchStatus.textContent = ''; batchStatus.className = 'small mt-2'; }
-  updateSelectedCount();
   send({ type: 'cancel' });
 }
 
 const failures = {
-  not_connected: 'Puter no está conectado. Vuelve a intentarlo.',
   busy: 'Ya hay una generación en curso.',
   cancelled: 'Generación detenida.',
   invalid_input: 'Usa como máximo 40 filas válidas por lote.',
-  model: 'No se pudo inicializar el modelo en este equipo.',
   provider: 'No se pudo completar la generación.',
   invalid_response: 'El formato no pudo procesarse. Reintenta con menos filas.',
   timeout: 'Se ha agotado el tiempo de respuesta. Puedes volver a intentarlo.'
@@ -126,41 +69,6 @@ window.addEventListener('pageshow', e => { if (e.persisted) reset(); });
 ['clear', 'erase', 'cancel-loading'].forEach(id => document.getElementById(id).addEventListener('click', () => reset('Datos locales retirados. Los correos ya abiertos en Gmail no se eliminan.')));
 document.getElementById('example').addEventListener('click', () => { reset(); input.value = 'Alumno1 5 5 6 4 6 7\nAlumno2 6 5 4 3 4 5'; });
 
-const selectAllBtn = document.getElementById('select-all-ai');
-const deselectAllBtn = document.getElementById('deselect-all-ai');
-const runSelectedBtn = document.getElementById('run-selected-ai');
-
-if (selectAllBtn) {
-  selectAllBtn.addEventListener('click', () => {
-    list.querySelectorAll('.ai-select-check').forEach(cb => { cb.checked = true; });
-    updateSelectedCount();
-  });
-}
-if (deselectAllBtn) {
-  deselectAllBtn.addEventListener('click', () => {
-    list.querySelectorAll('.ai-select-check').forEach(cb => { cb.checked = false; });
-    updateSelectedCount();
-  });
-}
-if (runSelectedBtn) {
-  runSelectedBtn.addEventListener('click', () => {
-    const checkedBoxes = Array.from(list.querySelectorAll('.ai-select-check:checked'));
-    const statusEl = document.getElementById('ai-batch-status');
-    if (checkedBoxes.length === 0) {
-      if (statusEl) {
-        statusEl.className = 'small mt-2 text-warning';
-        statusEl.textContent = 'Selecciona al menos un alumno marcando su casilla para mejorar con IA.';
-      }
-      return;
-    }
-    const selectedIds = checkedBoxes.map(cb => cb.dataset.id);
-    const selectedRecords = records.filter(r => selectedIds.includes(r.id));
-    if (selectedRecords.length > 0) {
-      runEnhanceBatch(selectedRecords);
-    }
-  });
-}
-
 function node(tag, text, cls) {
   const n = document.createElement(tag);
   if (text) n.textContent = text;
@@ -176,7 +84,7 @@ form.addEventListener('submit', event => {
     const batch = Feedback.prepare(Feedback.parseStudents(input.value));
     if (batch.records.length > 40) throw new Error('Máximo 40 filas por lote.');
     identities = batch.identities; records = batch.records; request = crypto.randomUUID();
-    send({ type: 'generate', request, records, model: 'local-pedagogico' });
+    send({ type: 'generate', request, records });
     input.value = ''; form.style.display = 'none'; loading.style.display = 'flex'; status.textContent = '';
     form.setAttribute('aria-busy', 'true'); progress('waiting'); started = Date.now();
     document.getElementById('elapsed').textContent = 'Tiempo transcurrido: 0 s';
@@ -194,103 +102,6 @@ window.addEventListener('message', event => {
   expire();
   const message = event.data;
   if (!message) return;
-
-  // Handle selective AI enhancement messages
-  if (message.type === 'enhance-progress') {
-    if (message.request !== currentEnhanceRequest) return;
-    const statusEl = document.getElementById('ai-batch-status');
-    if (statusEl) {
-      statusEl.className = 'small mt-2 text-primary';
-      statusEl.textContent = `Generando con IA para alumno ${message.current} de ${message.total}... El tiempo depende del equipo.`;
-      if (message.competencyCurrent) statusEl.textContent = `Alumno ${message.current} de ${message.total}. Competencia ${message.competencyCurrent} de ${message.competencyTotal}: ${message.competency}. Generando sugerencia…`;
-    }
-    const cardObj = studentCards.get(message.id);
-    if (cardObj) {
-      cardObj.methodBadge.textContent = 'Generando con IA... ⏳';
-      cardObj.methodBadge.className = 'badge bg-primary text-white border method-badge';
-    }
-    return;
-  }
-
-  if (message.type === 'enhance-student-result') {
-    if (message.request !== currentEnhanceRequest) return;
-    const cardObj = studentCards.get(message.id);
-    if (cardObj && message.studentResponse) {
-      const record = records.find(r => r.id === message.id);
-      let resp;
-      try { resp = Feedback.response(JSON.stringify([message.studentResponse]), [record])[0]; }
-      catch { cardObj.methodBadge.textContent = 'Sin cambios: respuesta inválida'; return; }
-      const accepted = new Set(message.provenance?.aiCompetencies || []);
-      const changes = [];
-      for (const c of resp.competencias_evaluadas) {
-        const previous = cardObj.suggestions.get(c.nombre_competencia);
-        // Keep teacher edits and all unaffected parts of the draft intact.
-        const oldText = `Sugerencia: ${previous}\n\n`;
-        const sectionStart = cardObj.area.value.indexOf(`\n\n${c.nombre_competencia}\nCalificación:`);
-        const sectionEnd = sectionStart < 0 ? -1 : cardObj.area.value.indexOf('\n\n', sectionStart + 2);
-        const suggestionStart = sectionStart < 0 ? -1 : cardObj.area.value.indexOf(oldText, sectionStart);
-        if (accepted.has(c.nombre_competencia) && c.recomendaciones !== previous && suggestionStart >= 0 && suggestionStart < sectionEnd) {
-          cardObj.area.value = cardObj.area.value.slice(0, suggestionStart) + `Sugerencia: ${c.recomendaciones}\n\n` + cardObj.area.value.slice(suggestionStart + oldText.length);
-          cardObj.suggestions.set(c.nombre_competencia, c.recomendaciones);
-          cardObj.aiCompetencies.add(c.nombre_competencia);
-          changes.push(c.nombre_competencia);
-        }
-      }
-      enhancementChanges += changes.length;
-      if (changes.length) {
-        const method = cardObj.aiCompetencies.size === record.competencias.length ? 'Con IA mediante Puter' : 'Mixto: Puter y reglas';
-        cardObj.area.value = cardObj.area.value.replace(/Método de elaboración: [^\n]+$/, `Método de elaboración: ${method}. Revisión docente requerida antes de su envío.`);
-        cardObj.methodBadge.textContent = `${changes.length} de ${record.competencias.length} sugerencias actualizadas con IA`;
-        cardObj.methodBadge.className = 'badge bg-success text-white border method-badge';
-        cardObj.changeNotice.textContent = `Sugerencias actualizadas: ${changes.join(', ')}. Las valoraciones de rúbrica no cambian.${changes.length < record.competencias.length ? ' Las demás sugerencias conservan su texto anterior.' : ''}`;
-        cardObj.check.checked = false;
-        cardObj.gmail.disabled = true;
-      } else {
-        cardObj.methodBadge.textContent = 'Sin cambios en el borrador';
-        cardObj.methodBadge.className = 'badge bg-warning text-dark border method-badge';
-        cardObj.changeNotice.textContent = message.provenance?.reason === 'inference_failed'
-          ? 'La generación de IA falló. Se conserva el borrador anterior.'
-          : 'No se han aplicado sugerencias nuevas: la respuesta no era utilizable, coincidía con la anterior o el texto había sido editado. Se conserva el borrador.';
-      }
-      cardObj.selectCheck.checked = false;
-      updateSelectedCount();
-    }
-    return;
-  }
-
-  if (message.type === 'enhance-complete') {
-    if (message.request !== currentEnhanceRequest) return;
-    currentEnhanceRequest = null;
-    setAiButtonsDisabled(false);
-    updateSelectedCount();
-    const statusEl = document.getElementById('ai-batch-status');
-    if (statusEl) {
-      statusEl.className = `small mt-2 ${enhancementChanges ? 'text-success' : 'text-warning'} fw-bold`;
-      statusEl.textContent = enhancementChanges
-        ? `${enhancementChanges} sugerencia(s) actualizada(s). Revisa los borradores antes de abrir Gmail.`
-        : 'La IA no ha aportado cambios aplicables. Se conservan los borradores anteriores.';
-    }
-    return;
-  }
-
-  if (message.type === 'enhance-failure') {
-    if (message.request !== currentEnhanceRequest) return;
-    currentEnhanceRequest = null;
-    setAiButtonsDisabled(false);
-    updateSelectedCount();
-    const statusEl = document.getElementById('ai-batch-status');
-    if (statusEl) {
-      statusEl.className = 'small mt-2 text-danger fw-bold';
-      statusEl.textContent = (message.detail || failures[message.code] || 'No se pudo generar con IA.');
-    }
-    studentCards.forEach(c => {
-      if (c.methodBadge.textContent.includes('...')) {
-        c.methodBadge.textContent = 'Propuestas por reglas';
-        c.methodBadge.className = 'badge bg-light text-secondary border method-badge';
-      }
-    });
-    return;
-  }
 
   // Handle initial batch generation messages
   if (!request || message.request !== request) return;
@@ -317,13 +128,10 @@ window.addEventListener('message', event => {
     form.setAttribute('aria-busy', 'false');
     loading.style.display = 'none';
     results.style.display = 'block';
-    studentCards.clear();
 
     for (const response of responses) {
       const person = identities.get(response.id);
-      const info = message.provenance?.[response.id] || {};
-      const method = ({ rules: 'Propuestas por reglas', ai: 'Con IA mediante Puter', mixed: 'Mixto: Puter y reglas' })[info.method] || 'Propuestas por reglas';
-      const reason = ({ not_loaded: 'La IA no estaba cargada.', inference_failed: 'La IA falló; se aplicaron reglas.', incomplete: 'La respuesta de IA se completó con reglas.' })[info.reason] || '';
+      const method = 'Rúbricas y banco local de sugerencias';
 
       let body = `Hola, ${person.name}:\n\n${response.intro}\n\n`;
       for (const c of response.competencias_evaluadas) {
@@ -336,28 +144,7 @@ window.addEventListener('message', event => {
       const card = node('article', '', 'list-group-item p-3 mb-3');
 
       const topBar = node('div', '', 'd-flex flex-wrap justify-content-between align-items-center gap-2 mb-2 pb-2 border-bottom');
-      const checkWrap = node('div', '', 'form-check d-flex align-items-center mb-0');
-      const selectCheck = node('input', '', 'form-check-input me-2 ai-select-check');
-      selectCheck.type = 'checkbox';
-      selectCheck.id = `select-ai-${response.id}`;
-      selectCheck.dataset.id = response.id;
-      const nameLabel = node('label', person.name, 'form-check-label fw-bold mb-0');
-      nameLabel.htmlFor = selectCheck.id;
-      nameLabel.style.cursor = 'pointer';
-      checkWrap.append(selectCheck, nameLabel);
-
-      const actions = node('div', '', 'd-flex align-items-center gap-2');
-      const methodBadge = node('span', method + (reason ? ' · ' + reason : ''), 'badge bg-light text-secondary border method-badge');
-      const singleAiBtn = node('button', '✨ Mejorar con IA', 'btn btn-sm btn-outline-primary py-0 px-2 btn-ai-single');
-      singleAiBtn.type = 'button';
-      actions.append(methodBadge, singleAiBtn);
-      topBar.append(checkWrap, actions);
-
-      selectCheck.addEventListener('change', updateSelectedCount);
-      singleAiBtn.addEventListener('click', () => {
-        const target = records.find(r => r.id === response.id);
-        if (target) runEnhanceBatch([target]);
-      });
+      topBar.append(node('strong', person.name), node('span', method, 'badge bg-light text-secondary border'));
 
       const details = node('details', '', 'draft-details');
       const summary = node('summary');
@@ -403,19 +190,13 @@ window.addEventListener('message', event => {
       });
 
       details.append(label, area, review, gmail, node('p', 'Al abrir Gmail, el texto y el destinatario se incluyen en su URL y pasan a Google. Comprueba la cuenta institucional y revisa antes de enviar.', 'small mt-2'));
-      const changeNotice = node('p', '', 'small mt-2 mb-2');
-      changeNotice.setAttribute('role', 'status');
-      card.append(topBar, changeNotice, details);
+      card.append(topBar, details);
       list.append(card);
 
-      studentCards.set(response.id, { card, area, methodBadge, check, gmail, selectCheck, singleAiBtn, person, changeNotice,
-        suggestions: new Map(response.competencias_evaluadas.map(c => [c.nombre_competencia, c.recomendaciones])),
-        aiCompetencies: new Set(info.aiCompetencies || []) });
     }
 
     request = null;
-    status.textContent = 'Recomendaciones preparadas. Revisa cada borrador o selecciona alumnos para mejorar con IA.';
-    updateSelectedCount();
+    status.textContent = 'Recomendaciones preparadas. Revisa y adapta cada borrador antes de abrir Gmail.';
   } catch (err) {
     console.error('Error procesando respuesta en editor.js:', err);
     fail('invalid_response', err?.message || String(err));

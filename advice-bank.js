@@ -291,13 +291,14 @@
       let state = bags.get(key);
       if (!state) { state = { remaining: [], last: null }; bags.set(key, state); }
       if (!state.remaining.length) {
-        state.remaining = [...bank[group][tier]];
+        const configured = root.LOCAL_ADVICE_BANK?.[group]?.[tier];
+        state.remaining = [...(Array.isArray(configured) && configured.length && configured.every(t => typeof t === 'string' && t.trim()) ? configured : bank[group][tier])];
         for (let i = state.remaining.length - 1; i > 0; i--) {
           const j = Math.floor(random() * (i + 1));
           [state.remaining[i], state.remaining[j]] = [state.remaining[j], state.remaining[i]];
         }
         const end = state.remaining.length - 1;
-        if (state.remaining[end] === state.last) [state.remaining[0], state.remaining[end]] = [state.remaining[end], state.remaining[0]];
+        if (end > 0 && state.remaining[end] === state.last) [state.remaining[0], state.remaining[end]] = [state.remaining[end], state.remaining[0]];
       }
       state.last = state.remaining.pop();
       return state.last;

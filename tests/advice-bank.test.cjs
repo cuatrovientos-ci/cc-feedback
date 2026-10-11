@@ -45,3 +45,12 @@ test('individual subcompetencies map to their families', () => {
     assert.ok(bank[key][3].includes(select(name, 9)));
   }
 });
+
+test('uses administrator edits distributed by the server for the selected level', () => {
+  globalThis.LOCAL_ADVICE_BANK = {teamwork: [[], ['Sugerencia guardada por el docente.'], [], []]};
+  try {
+    const select = createSelector();
+    assert.equal(select('Trabajo en equipo', 6), 'Sugerencia guardada por el docente.');
+    assert.ok(bank.teamwork[0].includes(select('Trabajo en equipo', 2)));
+  } finally { delete globalThis.LOCAL_ADVICE_BANK; }
+});

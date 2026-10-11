@@ -127,11 +127,19 @@ DEFAULT_SETTINGS = {
     "advice_suffix": "Ajusta la dificultad y los apoyos con tu docente según las evidencias de aprendizaje."
 }
 
+class ClosingConnection(sqlite3.Connection):
+    def __exit__(self, *args):
+        try:
+            return super().__exit__(*args)
+        finally:
+            self.close()
+
+
 def get_db(db_path=None):
     path = db_path or os.environ.get('DATABASE_PATH') or DEFAULT_DB_PATH
     if not os.path.isabs(path):
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, factory=ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -168,6 +176,14 @@ def init_db(db_path=None):
             )
         ''')
         
+        cursor.execute('CREATE TABLE IF NOT EXISTS advice_bank (family TEXT NOT NULL, level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 4), position INTEGER NOT NULL, advice TEXT NOT NULL, PRIMARY KEY(family, level, position))')
+        with open(os.path.join(os.path.dirname(__file__), 'advice-bank.seed.json'), encoding='utf-8') as seed_file:
+            seeds = json.load(seed_file)
+        for family, levels in seeds.items():
+            for level, variants in enumerate(levels, 1):
+                for position, advice in enumerate(variants, 1):
+                    cursor.execute('INSERT OR IGNORE INTO advice_bank VALUES (?, ?, ?, ?)', (family, level, position, advice))
+
         # Seed rubrics if empty
         cursor.execute('SELECT COUNT(*) FROM rubrics')
         if cursor.fetchone()[0] == 0:
@@ -318,6 +334,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = RUBRICS;
 globalThis.LOCAL_RUBRICS = RUBRICS;
 globalThis.LOCAL_ADVICE = ADVICE;
 globalThis.LOCAL_SETTINGS = SETTINGS;
+globalThis.LOCAL_ADVICE_BANK = {json.dumps(get_advice_bank(db_path), ensure_ascii=False)};
 """
 
 def export_to_rubricas_js(db_path=None, target_file=None):
@@ -328,3 +345,22 @@ def export_to_rubricas_js(db_path=None, target_file=None):
             f.write(content)
     except Exception as e:
         print(f"Error escribiendo {dest}: {e}")
+
+
+def get_advice_bank(db_path=None):
+    result = {}
+    with get_db(db_path) as conn:
+        for row in conn.execute('SELECT * FROM advice_bank ORDER BY family, level, position'):
+            result.setdefault(row['family'], [[], [], [], []])[row['level'] - 1].append(row['advice'])
+    return result
+
+
+def update_bank_advice(family, level, position, advice, db_path=None):
+    advice = advice.strip()
+    if not 20 <= len(advice) <= 1000:
+        raise ValueError('Escribe entre 20 y 1000 caracteres.')
+    with get_db(db_path) as conn:
+        updated = conn.execute('UPDATE advice_bank SET advice = ? WHERE family = ? AND level = ? AND position = ?', (advice, family, level, position))
+        if updated.rowcount != 1:
+            raise ValueError('Sugerencia no encontrada.')
+    export_to_rubricas_js(db_path)

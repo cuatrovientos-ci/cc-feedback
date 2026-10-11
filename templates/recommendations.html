@@ -6,12 +6,27 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h2 class="fw-bold mb-1">Consejos Pedagógicos de Mejora</h2>
-        <p class="text-muted mb-0">Propuestas de acción concretas aplicadas por el motor pedagógico y de apoyo a la IA.</p>
+        <p class="text-muted mb-0">Propuestas de acción concretas aplicadas por el motor pedagógico y al banco local.</p>
     </div>
     <a href="/admin/recommendations/new" class="btn btn-cv btn-sm">+ Nuevo Consejo</a>
 </div>
 
-<p class="alert alert-info">El banco local contiene 192 propuestas por competencia y nivel. Los seis consejos originales sin editar dan paso al banco. Los consejos nuevos o modificados que coincidan con la competencia tienen prioridad, en el orden mostrado, y se aplican a todos sus niveles. El banco se mantiene en advice-bank.js; estas modificaciones no alteran las rúbricas.</p>
+<p class="alert alert-info">El banco contiene 192 sugerencias en total, organizadas por competencia y nivel. Puedes verlas y editarlas a continuación. Son textos públicos: no incluyas nombres ni datos de alumnos. Los cambios se aplican al generar nuevos borradores después de recargar la aplicación.</p>
+<h3>Banco de sugerencias por nivel</h3>
+{% for key, label in families.items() %}
+<details class="card p-3 mb-3" id="bank-{{ key }}">
+<summary class="fw-bold">{{ label }} · 32 sugerencias</summary>
+{% for variants in bank[key] %}
+<h4 class="h6 mt-4">{{ levels[loop.index0] }}</h4>
+{% set level = loop.index %}
+<ol>{% for advice in variants %}
+<li class="mb-3">{{ advice }} <a class="btn btn-outline-primary btn-sm" href="{{ url_for('admin_bank_edit', family=key, level=level, position=loop.index) }}">Editar sugerencia {{ loop.index }}</a></li>
+{% endfor %}</ol>
+{% endfor %}
+</details>
+{% endfor %}
+<h3 class="mt-4">Consejos generales (sustituciones)</h3>
+<p>Un consejo general nuevo o modificado que coincida con una competencia sustituye sus propuestas del banco para todos los niveles. Tiene prioridad el primero en el orden mostrado. Los seis consejos originales sin editar no sustituyen el banco.</p>
 <div class="card shadow-sm border-0">
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
